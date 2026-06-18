@@ -11,6 +11,7 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
   const [isVideo, setIsVideo] = useState(false);
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(false);
+  
   const [uploadProgress, setUploadProgress] = useState(null);
   const fileRef = useRef();
 
@@ -37,10 +38,12 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
   async function submit() {
     if (!file || !currentUser) return;
     setLoading(true);
-    setUploadProgress("Uploading…");
+    setUploadProgress(0);
     try {
-      const { url, mediaType } = await uploadToCloudinary(file);
-      setUploadProgress("Saving post…");
+      const { url, mediaType } = await uploadToCloudinary(file, (pct) => {
+        setUploadProgress(pct);
+      });
+      setUploadProgress("saving");
       await apiFetch("/api/posts", {
         method: "POST",
         body: JSON.stringify({
@@ -58,6 +61,13 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
     setLoading(false);
     setUploadProgress(null);
   }
+
+  const progressLabel =
+    uploadProgress === "saving"
+      ? "Saving post…"
+      : typeof uploadProgress === "number"
+      ? `Uploading… ${uploadProgress}%`
+      : "Sharing…";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -126,8 +136,19 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
           />
 
           <button className="modal-submit-btn" onClick={submit} disabled={!file || loading}>
-            {loading ? (uploadProgress || "Sharing…") : "Share"}
+            {loading ? progressLabel : "Share"}
           </button>
+
+          {loading && (
+            <div className="upload-progress-track">
+              <div
+                className={`upload-progress-bar${uploadProgress === "saving" ? " indeterminate" : ""}`}
+                style={{
+                  width: uploadProgress === "saving" ? "100%" : `${uploadProgress ?? 0}%`,
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

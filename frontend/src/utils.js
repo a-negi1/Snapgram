@@ -2,7 +2,7 @@ const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 
-export async function uploadToCloudinary(file) {
+export function uploadToCloudinary(file, onProgress) {
   const isVideo = file.type.startsWith("video/");
   const resourceType = isVideo ? "video" : "image";
 
@@ -11,14 +11,37 @@ export async function uploadToCloudinary(file) {
   formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
   formData.append("folder", "snapgram");
 
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
-    { method: "POST", body: formData }
-  );
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
 
-  if (!res.ok) throw new Error("Cloudinary upload failed");
-  const data = await res.json();
-  return { url: data.secure_url, mediaType: resourceType };
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable && typeof onProgress === "function") {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error("Cloudinary upload failed"));
+        return;
+      }
+      try {
+        const data = JSON.parse(xhr.responseText);
+        resolve({ url: data.secure_url, mediaType: resourceType });
+      } catch {
+        reject(new Error("Invalid response from Cloudinary"));
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+    xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+
+    xhr.open(
+      "POST",
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`
+    );
+    xhr.send(formData);
+  });
 }
 
 
