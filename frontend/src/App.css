@@ -836,7 +836,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 1100;
   padding: 20px;
   overflow-y: auto;
 }
@@ -1493,6 +1493,11 @@ body {
   .feed {
     width: 100%;
     max-width: 100%;
+  }
+
+
+  .post-card .comment-input-row {
+    display: flex;
   }
 }
 
@@ -2346,6 +2351,13 @@ body {
 
   .main-content--reels {
     margin-left: 0;
+  }
+
+
+  .reel-comment-sheet {
+    bottom: 60px;
+    z-index: 1100;
+    border-radius: 20px 20px 0 0;
   }
 }
 
