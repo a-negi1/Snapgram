@@ -1,4 +1,4 @@
-export const HomeIcon = ({ filled }) => (
+﻿export const HomeIcon = ({ filled }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
     <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
     <path d="M9 21V12h6v9" />
@@ -74,3 +74,17 @@ export const SunIcon = () => (
     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
   </svg>
 );
+
+export const ReelIcon = ({ filled }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+    <rect x="2" y="2" width="20" height="20" rx="4" />
+    <circle cx="12" cy="12" r="3" fill={filled ? "white" : "none"} stroke={filled ? "none" : "currentColor"} strokeWidth="2" />
+    <line x1="2" y1="7" x2="22" y2="7" />
+    <line x1="2" y1="17" x2="22" y2="17" />
+    <line x1="7" y1="2" x2="7" y2="7" />
+    <line x1="17" y1="2" x2="17" y2="7" />
+    <line x1="7" y1="17" x2="7" y2="22" />
+    <line x1="17" y1="17" x2="17" y2="22" />
+  </svg>
+);
+

@@ -1,10 +1,9 @@
-import { io } from "socket.io-client";
+﻿import { io } from "socket.io-client";
 import { auth } from "./firebase";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 let socket = null;
-
 
 export async function getSocket() {
   if (socket?.connected) return socket;
@@ -20,9 +19,7 @@ export async function getSocket() {
     reconnectionDelay: 1000,
   });
 
-  
-
-  socket.on("reconnect_attempt", async () => {
+socket.on("reconnect_attempt", async () => {
     try {
       const freshToken = await auth.currentUser?.getIdToken(true);
       if (freshToken) socket.auth = { token: freshToken };
@@ -36,14 +33,12 @@ export async function getSocket() {
   return socket;
 }
 
-
 export function disconnectSocket() {
   if (socket) {
     socket.disconnect();
     socket = null;
   }
 }
-
 
 export function getRawSocket() {
   return socket;

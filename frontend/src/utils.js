@@ -1,6 +1,5 @@
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+﻿const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-
 
 export function uploadToCloudinary(file, onProgress) {
   const isVideo = file.type.startsWith("video/");
@@ -44,13 +43,11 @@ export function uploadToCloudinary(file, onProgress) {
   });
 }
 
-
 export function timeAgo(ts) {
   if (!ts) return "";
   const now = Date.now();
-  
 
-  const date = ts?.toDate ? ts.toDate().getTime() : new Date(ts).getTime();
+const date = ts?.toDate ? ts.toDate().getTime() : new Date(ts).getTime();
   const diff = Math.floor((now - date) / 1000);
 
   if (diff < 60) return `${diff}s`;

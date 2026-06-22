@@ -11,7 +11,7 @@ export default function RightPanel({ currentUser, currentUserProfile, onProfileC
   useEffect(() => {
     if (!currentUser) return;
     apiFetch("/api/users/suggestions")
-      .then((users) => setSuggestions(users.slice(0, 5)))
+      .then((res) => setSuggestions((res.data || res).slice(0, 5)))
       .catch(console.error);
   }, [currentUser, currentUserProfile?.following]);
 
@@ -74,7 +74,7 @@ export default function RightPanel({ currentUser, currentUserProfile, onProfileC
 
       <div style={{ marginTop: 24, fontSize: 11, color: "var(--dark-gray)", lineHeight: 2 }}>
         About · Help · Press · API · Jobs · Privacy · Terms<br />
-        © 2025 SNAPGRAM BY ADHEESH NEGI
+        © 2026 SNAPGRAM BY ADHEESH NEGI
       </div>
     </div>
   );

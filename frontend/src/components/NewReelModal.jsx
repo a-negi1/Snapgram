@@ -2,53 +2,72 @@
 import { apiFetch } from "../api";
 import { uploadToCloudinary } from "../utils";
 
-const ACCEPTED = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,video/x-msvideo";
-const MAX_VIDEO_MB = 100;
+const MAX_DURATION_SECS = 40;
+const MAX_VIDEO_MB = 200;
 
-export default function NewPostModal({ currentUser, currentUserProfile, onClose, onPosted }) {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [isVideo, setIsVideo] = useState(false);
-  const [caption, setCaption] = useState("");
-  const [loading, setLoading] = useState(false);
-  
+export default function NewReelModal({ currentUser, currentUserProfile, onClose, onPosted }) {
+  const [file, setFile]                   = useState(null);
+  const [preview, setPreview]             = useState(null);
+  const [caption, setCaption]             = useState("");
+  const [loading, setLoading]             = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
-  const fileRef = useRef();
+  const [error, setError]                 = useState("");
+  const fileRef                           = useRef();
+  const previewVideoRef                   = useRef();
 
   function handleFile(f) {
     if (!f) return;
-    const video = f.type.startsWith("video/");
-    if (video && f.size > MAX_VIDEO_MB * 1024 * 1024) {
-      alert(`Video must be under ${MAX_VIDEO_MB} MB`);
+    setError("");
+
+    if (!f.type.startsWith("video/")) {
+      setError("Reels only accept video files.");
       return;
     }
-    setFile(f);
-    setIsVideo(video);
-    setPreview(URL.createObjectURL(f));
+    if (f.size > MAX_VIDEO_MB * 1024 * 1024) {
+      setError(`Video must be under ${MAX_VIDEO_MB} MB.`);
+      return;
+    }
+
+const url = URL.createObjectURL(f);
+    const vid = document.createElement("video");
+    vid.preload = "metadata";
+    vid.src = url;
+    vid.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      if (vid.duration > MAX_DURATION_SECS) {
+        setError(`Reels must be 40 seconds or shorter. Your video is ${Math.round(vid.duration)}s.`);
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+      setFile(f);
+      setPreview(URL.createObjectURL(f));
+    };
+    vid.onerror = () => {
+      URL.revokeObjectURL(url);
+      setError("Could not read video metadata. Please try another file.");
+    };
   }
 
   function clearFile(e) {
     e.stopPropagation();
     setFile(null);
     setPreview(null);
-    setIsVideo(false);
-    fileRef.current.value = "";
+    setError("");
+    if (fileRef.current) fileRef.current.value = "";
   }
 
   async function submit() {
     if (!file || !currentUser) return;
     setLoading(true);
     setUploadProgress(0);
+    setError("");
     try {
-      const { url, mediaType } = await uploadToCloudinary(file, (pct) => {
-        setUploadProgress(pct);
-      });
+      const { url } = await uploadToCloudinary(file, (pct) => setUploadProgress(pct));
       setUploadProgress("saving");
-      await apiFetch("/api/posts", {
+      await apiFetch("/api/reels", {
         method: "POST",
         body: JSON.stringify({
-          imageURL: url,
-          mediaType,
+          videoURL: url,
           caption: caption.trim(),
           username: currentUserProfile?.username || currentUser.displayName || "user",
           photoURL: currentUserProfile?.photoURL || "",
@@ -56,7 +75,7 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
       });
       onPosted();
     } catch (e) {
-      alert("Error posting: " + e.message);
+      setError("Upload failed: " + e.message);
     }
     setLoading(false);
     setUploadProgress(null);
@@ -64,7 +83,7 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
 
   const progressLabel =
     uploadProgress === "saving"
-      ? "Saving post…"
+      ? "Saving reel…"
       : typeof uploadProgress === "number"
       ? `Uploading… ${uploadProgress}%`
       : "Sharing…";
@@ -73,7 +92,7 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
     <div className="modal-overlay" onClick={onClose}>
       <div className="new-post-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span>New Post</span>
+          <span>New Reel</span>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
@@ -85,46 +104,57 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
           >
             {preview ? (
               <>
-                {isVideo ? (
-                  <video
-                    src={preview}
-                    className="upload-preview"
-                    controls
-                    muted
-                    style={{ background: "#000" }}
-                  />
-                ) : (
-                  <img src={preview} alt="preview" className="upload-preview" />
-                )}
+                <video
+                  ref={previewVideoRef}
+                  src={preview}
+                  className="upload-preview"
+                  style={{ aspectRatio: "9/16", objectFit: "cover", background: "#000", maxHeight: 320 }}
+                  controls
+                  muted
+                  playsInline
+                />
                 <button className="upload-clear-btn" onClick={clearFile} title="Remove">×</button>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 40, marginBottom: 10 }}>🖼️🎬</div>
+                <div style={{ fontSize: 40, marginBottom: 10 }}>🎬</div>
                 <div style={{ fontWeight: 700, marginBottom: 6 }}>Drag & drop or click to upload</div>
                 <div style={{ fontSize: 13, color: "var(--dark-gray)", marginBottom: 4 }}>
-                  Images: JPG, PNG, GIF, WebP
+                  Vertical video (9:16) recommended
                 </div>
                 <div style={{ fontSize: 13, color: "var(--dark-gray)" }}>
-                  Videos: MP4, WebM, MOV (max {MAX_VIDEO_MB} MB)
+                  MP4, WebM, MOV · Max {MAX_DURATION_SECS}s · Max {MAX_VIDEO_MB} MB
                 </div>
               </>
             )}
           </div>
 
-          {}
           <input
             ref={fileRef}
             type="file"
-            accept={ACCEPTED}
+            accept="video/*"
             style={{ display: "none" }}
             onChange={(e) => handleFile(e.target.files[0])}
           />
 
           {preview && (
             <button className="upload-change-btn" onClick={() => fileRef.current.click()} style={{ marginTop: 8 }}>
-              Change {isVideo ? "video" : "photo"}
+              Change video
             </button>
+          )}
+
+          {error && (
+            <div style={{
+              background: "rgba(237,73,86,0.1)",
+              border: "1px solid rgba(237,73,86,0.3)",
+              color: "#ed4956",
+              padding: "10px 14px",
+              borderRadius: 8,
+              fontSize: 13,
+              marginTop: 10,
+            }}>
+              {error}
+            </div>
           )}
 
           <textarea
@@ -136,7 +166,7 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
           />
 
           <button className="modal-submit-btn" onClick={submit} disabled={!file || loading}>
-            {loading ? progressLabel : "Share"}
+            {loading ? progressLabel : "Share Reel"}
           </button>
 
           {loading && (

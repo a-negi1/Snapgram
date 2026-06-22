@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 import { apiFetch } from "./api";
 import { getSocket, disconnectSocket } from "./socket";
 import "./App.css";
 
-import { HomeIcon, SearchIcon, PlusIcon, HeartIcon, LogoutIcon, MoonIcon, SunIcon } from "./components/Icons.jsx";
+import { HomeIcon, SearchIcon, PlusIcon, HeartIcon, LogoutIcon, MoonIcon, SunIcon, ReelIcon } from "./components/Icons.jsx";
 import Avatar from "./components/Avatar.jsx";
 import NewPostModal from "./components/NewPostModal.jsx";
+import NewReelModal from "./components/NewReelModal.jsx";
 import RightPanel from "./components/RightPanel.jsx";
 
 import AuthPage from "./pages/AuthPage.jsx";
@@ -15,6 +16,7 @@ import FeedPage from "./pages/FeedPage.jsx";
 import ExplorePage from "./pages/ExplorePage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
+import ReelsPage from "./pages/ReelsPage.jsx";
 
 export default function App() {
   const [authUser, setAuthUser] = useState(null);
@@ -23,6 +25,7 @@ export default function App() {
   const [page, setPage] = useState("home");
   const [viewingUid, setViewingUid] = useState(null);
   const [showNewPost, setShowNewPost] = useState(false);
+  const [showNewReel, setShowNewReel] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
 
@@ -36,9 +39,7 @@ export default function App() {
     }
   }, [darkMode]);
 
-  
-
-  useEffect(() => {
+useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);
       setAuthLoading(false);
@@ -47,13 +48,7 @@ export default function App() {
     return unsub;
   }, []);
 
-  
-
-  
-
-  
-
-  useEffect(() => {
+useEffect(() => {
     if (!authUser) { setCurrentUserProfile(null); return; }
     apiFetch("/api/users/me")
       .then((profile) => {
@@ -61,9 +56,8 @@ export default function App() {
         else setCurrentUserProfile(null);
       })
       .catch(async () => {
-        
 
-        try {
+try {
           const profile = await apiFetch("/api/users/me", {
             method: "POST",
             body: JSON.stringify({
@@ -74,9 +68,8 @@ export default function App() {
               photoURL: authUser.photoURL || "",
             }),
           });
-          
 
-          if (profile && profile.uid) setCurrentUserProfile(profile);
+if (profile && profile.uid) setCurrentUserProfile(profile);
           else setCurrentUserProfile(null);
         } catch (_) {
           setCurrentUserProfile(null);
@@ -84,37 +77,26 @@ export default function App() {
       });
   }, [authUser]);
 
-
-  
-
-  useEffect(() => {
+useEffect(() => {
     if (!authUser) return;
 
-    
-
-    if ("Notification" in window && Notification.permission === "default") {
+if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
 
     let sock;
-    
 
-    apiFetch("/api/notifications/unread-count")
+apiFetch("/api/notifications/unread-count")
       .then((d) => setUnreadNotifs(d.count || 0))
       .catch(() => {});
 
-    
-
-    getSocket().then((s) => {
+getSocket().then((s) => {
       sock = s;
       s.on("notification", (notif) => {
-        
 
-        setUnreadNotifs((n) => n + 1);
+setUnreadNotifs((n) => n + 1);
 
-        
-
-        try {
+try {
           const ctx = new (window.AudioContext || window.webkitAudioContext)();
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
@@ -129,9 +111,7 @@ export default function App() {
           osc.stop(ctx.currentTime + 0.4);
         } catch (_) {}
 
-        
-
-        if ("Notification" in window && Notification.permission === "granted" && document.visibilityState !== "visible") {
+if ("Notification" in window && Notification.permission === "granted" && document.visibilityState !== "visible") {
           const title = notif.type === "like"
             ? `${notif.fromUsername} liked your post`
             : notif.type === "comment"
@@ -180,6 +160,8 @@ export default function App() {
 
   if (!authUser) return <AuthPage onAuth={setAuthUser} onProfileLoaded={setCurrentUserProfile} />;
 
+const isReelsPage = page === "reels";
+
   return (
     <div className="app-layout">
       {}
@@ -189,6 +171,9 @@ export default function App() {
         </button>
         <button className={`nav-item ${page === "explore" ? "active" : ""}`} onClick={() => setPage("explore")}>
           <SearchIcon filled={page === "explore"} />
+        </button>
+        <button className={`nav-item ${page === "reels" ? "active" : ""}`} onClick={() => setPage("reels")}>
+          <ReelIcon filled={page === "reels"} />
         </button>
         <button className="nav-item" onClick={() => setShowNewPost(true)}>
           <PlusIcon />
@@ -211,9 +196,17 @@ export default function App() {
         <button className={`nav-item ${page === "explore" ? "active" : ""}`} onClick={() => setPage("explore")}>
           <SearchIcon filled={page === "explore"} /><span>Explore</span>
         </button>
+        <button className={`nav-item ${page === "reels" ? "active" : ""}`} onClick={() => setPage("reels")}>
+          <ReelIcon filled={page === "reels"} /><span>Reels</span>
+        </button>
         <button className="nav-item" onClick={() => setShowNewPost(true)}>
           <PlusIcon /><span>Create</span>
         </button>
+        {page === "reels" && (
+          <button className="nav-item" onClick={() => setShowNewReel(true)} style={{ color: "var(--blue)" }}>
+            <ReelIcon /><span>New Reel</span>
+          </button>
+        )}
         <button className={`nav-item ${page === "notifications" ? "active" : ""}`} onClick={goToNotifications} style={{ position: "relative" }}>
           <HeartIcon filled={page === "notifications"} />
           <span>Notifications</span>
@@ -236,6 +229,11 @@ export default function App() {
       <div className="mobile-header">
         <div className="mobile-header-logo">Snapgram</div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          {page === "reels" && (
+            <button className="mobile-logout-btn" onClick={() => setShowNewReel(true)} title="New Reel">
+              <ReelIcon />
+            </button>
+          )}
           <button className="mobile-logout-btn" onClick={() => setDarkMode(!darkMode)}>
             {darkMode ? <SunIcon /> : <MoonIcon />}
           </button>
@@ -245,7 +243,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="main-content">
+      <div className={`main-content ${isReelsPage ? "main-content--reels" : ""}`}>
         {page === "home" && (
           <>
             <FeedPage currentUser={authUser} currentUserProfile={currentUserProfile} onProfileClick={goToProfile} />
@@ -253,6 +251,13 @@ export default function App() {
           </>
         )}
         {page === "explore" && <ExplorePage currentUser={authUser} currentUserProfile={currentUserProfile} onProfileClick={goToProfile} />}
+        {page === "reels" && (
+          <ReelsPage
+            currentUser={authUser}
+            currentUserProfile={currentUserProfile}
+            onProfileClick={goToProfile}
+          />
+        )}
         {page === "profile" && (
           <ProfilePage
             profileUid={viewingUid}
@@ -273,6 +278,15 @@ export default function App() {
           currentUserProfile={currentUserProfile}
           onClose={() => setShowNewPost(false)}
           onPosted={() => { setShowNewPost(false); setPage("home"); }}
+        />
+      )}
+
+      {showNewReel && (
+        <NewReelModal
+          currentUser={authUser}
+          currentUserProfile={currentUserProfile}
+          onClose={() => setShowNewReel(false)}
+          onPosted={() => { setShowNewReel(false); setPage("reels"); }}
         />
       )}
     </div>

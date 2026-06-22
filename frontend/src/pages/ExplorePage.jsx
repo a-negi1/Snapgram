@@ -1,21 +1,35 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useCallback, useRef } from "react";
 import { apiFetch } from "../api";
 import Avatar from "../components/Avatar.jsx";
 import PostCard from "../components/PostCard.jsx";
 import { SearchIcon } from "../components/Icons.jsx";
+import { useCursorPagination } from "../hooks/useCursorPagination.js";
+
+function SkeletonGridItem() {
+  return <div className="skeleton-grid-item" />;
+}
 
 export default function ExplorePage({ currentUser, currentUserProfile, onProfileClick }) {
-  const [posts, setPosts] = useState([]);
   const [searchVal, setSearchVal] = useState("");
   const [users, setUsers] = useState([]);
   const [searching, setSearching] = useState(false);
   const [lightboxPost, setLightboxPost] = useState(null);
 
-  useEffect(() => {
-    apiFetch("/api/posts/explore")
-      .then(setPosts)
-      .catch(console.error);
-  }, []);
+const exploreFetchFn = useCallback(
+    (cursor) =>
+      apiFetch(`/api/posts/explore?limit=12${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+    []
+  );
+
+  const {
+    items: posts,
+    loading,
+    loadingMore,
+    hasMore,
+    error: exploreError,
+    loadMore,
+    sentinelRef,
+  } = useCursorPagination(exploreFetchFn);
 
   async function searchUsers(val) {
     setSearchVal(val);
@@ -69,38 +83,68 @@ export default function ExplorePage({ currentUser, currentUserProfile, onProfile
       ) : (
         <>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--dark-gray)", marginBottom: 12 }}>Top Posts</div>
-          <div className="explore-grid">
-            {posts.map((p) => (
-              <div key={p._id} className="profile-grid-item" onClick={() => setLightboxPost(p)}>
-                {p.imageURL ? (
-                  p.mediaType === "video" ? (
-                    <>
-                      <video
-                        src={p.imageURL}
-                        preload="metadata"
-                        muted
-                        playsInline
-                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
-                      />
-                      <div style={{ position: "absolute", top: 6, right: 8, background: "rgba(0,0,0,0.55)", borderRadius: 4, padding: "2px 5px", display: "flex", alignItems: "center", gap: 3 }}>
-                        <svg viewBox="0 0 10 10" fill="white" width="10" height="10"><polygon points="2,1 9,5 2,9"/></svg>
+
+          {loading ? (
+            <div className="loading-spinner">Loading…</div>
+          ) : (
+            <>
+              <div className="explore-grid">
+                {posts.map((p) => (
+                  <div key={p._id} className="profile-grid-item" onClick={() => setLightboxPost(p)}>
+                    {p.imageURL ? (
+                      p.mediaType === "video" ? (
+                        <>
+                          <video
+                            src={p.imageURL}
+                            preload="metadata"
+                            muted
+                            playsInline
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
+                          />
+                          <div style={{ position: "absolute", top: 6, right: 8, background: "rgba(0,0,0,0.55)", borderRadius: 4, padding: "2px 5px", display: "flex", alignItems: "center", gap: 3 }}>
+                            <svg viewBox="0 0 10 10" fill="white" width="10" height="10"><polygon points="2,1 9,5 2,9"/></svg>
+                          </div>
+                        </>
+                      ) : (
+                        <img src={p.imageURL} alt="" />
+                      )
+                    ) : (
+                      <div style={{ width: "100%", height: "100%", background: "var(--light-gray)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ fontSize: 32 }}>📷</span>
                       </div>
-                    </>
-                  ) : (
-                    <img src={p.imageURL} alt="" />
-                  )
-                ) : (
-                  <div style={{ width: "100%", height: "100%", background: "var(--light-gray)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ fontSize: 32 }}>📷</span>
+                    )}
+                    <div className="grid-overlay">
+                      <span>❤️ {p.likeCount || 0}</span>
+                      <span>💬 {p.commentCount || 0}</span>
+                    </div>
                   </div>
+                ))}
+
+                {}
+                {loadingMore && (
+                  <>
+                    <SkeletonGridItem />
+                    <SkeletonGridItem />
+                    <SkeletonGridItem />
+                  </>
                 )}
-                <div className="grid-overlay">
-                  <span>❤️ {p.likeCount || 0}</span>
-                  <span>💬 {p.commentCount || 0}</span>
-                </div>
               </div>
-            ))}
-          </div>
+
+              {}
+              {hasMore && (
+                <div ref={sentinelRef} style={{ height: 1 }} />
+              )}
+
+              {}
+              {exploreError && !loadingMore && (
+                <div className="load-more-retry">
+                  <span>Failed to load.</span>
+                  <button onClick={loadMore}>Tap to retry</button>
+                </div>
+              )}
+
+            </>
+          )}
         </>
       )}
 

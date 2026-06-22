@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+﻿const mongoose = require("mongoose");
 
 const postSchema = new mongoose.Schema(
   {
@@ -19,10 +19,7 @@ const postSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-
-
 postSchema.index({ uid: 1, createdAt: -1 });
-
 
 postSchema.index({ likeCount: -1 });
 

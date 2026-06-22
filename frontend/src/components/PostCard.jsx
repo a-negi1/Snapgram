@@ -11,12 +11,19 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
   const [saved, setSaved] = useState(post.savedBy?.includes(currentUser?.uid));
   const [comment, setComment] = useState("");
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState([]);
   const [shareCopied, setShareCopied] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [commentCount, setCommentCount] = useState(post.commentCount || 0);
   const [videoPlaying, setVideoPlaying] = useState(false);
+  const [heartBurst, setHeartBurst] = useState(null);
   const videoRef = useRef(null);
+  const mediaWrapRef = useRef(null);
+
+  const [comments, setComments] = useState([]);
+  const [commentsOldestId, setCommentsOldestId] = useState(null);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsLoadingMore, setCommentsLoadingMore] = useState(false);
+  const [commentsError, setCommentsError] = useState(null);
 
   function handlePlayClick(e) {
     e.stopPropagation();
@@ -24,9 +31,16 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
     setTimeout(() => videoRef.current?.play(), 50);
   }
 
-  const isOwner = currentUser?.uid === post.uid;
+  function handleDoubleTap(e) {
+    const rect = mediaWrapRef.current?.getBoundingClientRect();
+    const x = e.clientX - (rect?.left || 0);
+    const y = e.clientY - (rect?.top || 0);
+    setHeartBurst({ x, y, key: Date.now() });
+    setTimeout(() => setHeartBurst(null), 750);
+    if (!liked) toggleLike();
+  }
 
-  
+  const isOwner = currentUser?.uid === post.uid;
 
   useEffect(() => {
     let sock;
@@ -51,8 +65,6 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
       s.on("post-updated", onPostUpdated);
       s.on("new-comment", onNewComment);
 
-      
-
       sock._postHandlers = sock._postHandlers || {};
       sock._postHandlers[post._id] = { onPostUpdated, onNewComment };
     });
@@ -70,19 +82,14 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
     };
   }, [post._id, currentUser?.uid]);
 
-
   async function toggleLike() {
     if (!currentUser) return;
-    
-
     const nowLiked = !liked;
     setLiked(nowLiked);
     setLikeCount((c) => c + (nowLiked ? 1 : -1));
     try {
       await apiFetch(`/api/posts/${post._id}/like`, { method: "POST" });
     } catch {
-      
-
       setLiked(!nowLiked);
       setLikeCount((c) => c + (nowLiked ? -1 : 1));
     }
@@ -103,7 +110,7 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
     const text = comment.trim();
     setComment("");
     try {
-      await apiFetch(`/api/comments/${post._id}`, {
+      const newComment = await apiFetch(`/api/comments/${post._id}`, {
         method: "POST",
         body: JSON.stringify({
           text,
@@ -111,7 +118,8 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
           photoURL: currentUserProfile?.photoURL || "",
         }),
       });
-      if (showComments) setTimeout(loadComments, 300);
+      setComments((prev) => [...prev, newComment]);
+      setCommentCount((c) => c + 1);
     } catch (e) {
       alert("Failed to post comment: " + e.message);
     }
@@ -119,11 +127,38 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
 
   async function loadComments() {
     try {
-      const data = await apiFetch(`/api/comments/${post._id}`);
+      const res = await apiFetch(`/api/comments/${post._id}?limit=20`);
+      const { data = [], nextCursor = null, hasMore: more = false } = res;
       setComments(data);
+      setCommentsOldestId(data.length > 0 ? data[0]._id : null);
+      setCommentsHasMore(more);
+      setCommentsError(null);
     } catch (e) {
       console.error(e);
     }
+  }
+
+  async function loadMoreComments() {
+    if (commentsLoadingMore || !commentsOldestId) return;
+    setCommentsLoadingMore(true);
+    setCommentsError(null);
+    try {
+      const res = await apiFetch(
+        `/api/comments/${post._id}?limit=20&cursor=${commentsOldestId}`
+      );
+      const { data = [], nextCursor = null, hasMore: more = false } = res;
+      setComments((prev) => {
+        const existingIds = new Set(prev.map((c) => String(c._id)));
+        const fresh = data.filter((c) => !existingIds.has(String(c._id)));
+        return [...fresh, ...prev];
+      });
+      if (data.length > 0) setCommentsOldestId(data[0]._id);
+      setCommentsHasMore(more);
+    } catch (e) {
+      console.error(e);
+      setCommentsError("Failed to load. Tap to retry.");
+    }
+    setCommentsLoadingMore(false);
   }
 
   async function deletePost() {
@@ -141,7 +176,7 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
     const text = post.caption ? `${post.username}: "${post.caption}"` : `Check this post by ${post.username} on Snapgram`;
     if (navigator.share) {
       try { await navigator.share({ title: "Snapgram Post", text, url }); return; }
-      catch {  }
+      catch { }
     }
     setShowShareMenu((v) => !v);
   }
@@ -191,7 +226,7 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
 
         {post.imageURL ? (
           post.mediaType === "video" ? (
-            <div className="post-video-wrapper" onDoubleClick={toggleLike}>
+            <div className="post-video-wrapper" ref={mediaWrapRef} onDoubleClick={handleDoubleTap} style={{ position: "relative" }}>
               <video
                 ref={videoRef}
                 src={post.imageURL}
@@ -211,22 +246,33 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
                   </div>
                 </div>
               )}
+              {heartBurst && (
+                <div className="post-heart-burst" key={heartBurst.key} style={{ left: heartBurst.x, top: heartBurst.y }}>❤️</div>
+              )}
             </div>
           ) : (
-            <img
-              src={post.imageURL}
-              alt=""
-              className="post-image"
-              onDoubleClick={toggleLike}
-              onError={(e) => { e.target.style.display = "none"; }}
-            />
+            <div ref={mediaWrapRef} style={{ position: "relative" }} onDoubleClick={handleDoubleTap}>
+              <img
+                src={post.imageURL}
+                alt=""
+                className="post-image"
+                style={{ display: "block" }}
+                onError={(e) => { e.target.style.display = "none"; }}
+              />
+              {heartBurst && (
+                <div className="post-heart-burst" key={heartBurst.key} style={{ left: heartBurst.x, top: heartBurst.y }}>❤️</div>
+              )}
+            </div>
           )
         ) : (
-          <div className="post-image-placeholder" onDoubleClick={toggleLike}>
+          <div className="post-image-placeholder" ref={mediaWrapRef} style={{ position: "relative" }} onDoubleClick={handleDoubleTap}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
             </svg>
+            {heartBurst && (
+              <div className="post-heart-burst" key={heartBurst.key} style={{ left: heartBurst.x, top: heartBurst.y }}>❤️</div>
+            )}
           </div>
         )}
 
@@ -277,7 +323,6 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
         </div>
       </div>
 
-      {}
       {showComments && (
         <div className="modal-overlay" onClick={() => setShowComments(false)}>
           <div className="comments-modal" onClick={(e) => e.stopPropagation()}>
@@ -296,6 +341,22 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
                 <span className="post-username" style={{ fontSize: 14 }}>{post.username}</span>
               </div>
               <div className="comments-list">
+                {commentsHasMore && (
+                  <div style={{ textAlign: "center", padding: "8px 0" }}>
+                    {commentsLoadingMore ? (
+                      <span style={{ fontSize: 13, color: "var(--dark-gray)" }}>Loading…</span>
+                    ) : commentsError ? (
+                      <button className="load-more-comments-btn" onClick={loadMoreComments}>
+                        Failed to load. Tap to retry
+                      </button>
+                    ) : (
+                      <button className="load-more-comments-btn" onClick={loadMoreComments}>
+                        Load older comments
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {post.caption && (
                   <div className="comment-item">
                     <Avatar src={post.photoURL} name={post.username} size={28} />

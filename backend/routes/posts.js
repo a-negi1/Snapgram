@@ -1,78 +1,125 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const Post = require("../models/Post");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
 
-
 function getThumbURL(post) {
   if (!post.imageURL) return null;
   if (post.mediaType !== "video") return post.imageURL;
-  
 
-  
-
-  return post.imageURL
+return post.imageURL
     .replace("/video/upload/", "/video/upload/so_0,f_jpg/")
     .replace(/\.(mp4|webm|mov|avi|mkv)(\?.*)?$/i, ".jpg");
 }
 
-
+function parseLimit(raw, defaultVal = 12, max = 30) {
+  const n = parseInt(raw);
+  if (!n || n < 1) return defaultVal;
+  return Math.min(n, max);
+}
 
 router.get("/feed", authenticate, async (req, res) => {
   try {
     const me = await User.findOne({ uid: req.user.uid });
     const uids = [...new Set([req.user.uid, ...(me?.following || [])])].slice(0, 30);
-    const posts = await Post.find({ uid: { $in: uids } })
+
+    const limit = parseLimit(req.query.limit);
+    const cursor = req.query.cursor || null;
+
+    const query = { uid: { $in: uids } };
+    if (cursor) query._id = { $lt: cursor };
+
+    const data = await Post.find(query)
       .sort({ createdAt: -1 })
-      .limit(40);
-    res.json(posts);
+      .limit(limit);
+
+    const nextCursor = data.length === limit ? data[data.length - 1]._id : null;
+    const hasMore = data.length === limit;
+
+    res.json({ data, nextCursor, hasMore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 router.get("/explore", authenticate, async (req, res) => {
   try {
-    const posts = await Post.find().sort({ likeCount: -1 }).limit(30);
-    res.json(posts);
+    const limit = parseLimit(req.query.limit);
+    const cursorParam = req.query.cursor || null;
+
+    let query = {};
+    if (cursorParam) {
+      const parts = cursorParam.split("_");
+      const cursorId = parts.pop();
+      const cursorLikeCount = parseInt(parts.join("_")) || 0;
+      query = {
+        $or: [
+          { likeCount: { $lt: cursorLikeCount } },
+          { likeCount: cursorLikeCount, _id: { $lt: cursorId } },
+        ],
+      };
+    }
+
+    const data = await Post.find(query)
+      .sort({ likeCount: -1, _id: -1 })
+      .limit(limit);
+
+    let nextCursor = null;
+    if (data.length === limit) {
+      const last = data[data.length - 1];
+      nextCursor = `${last.likeCount}_${last._id}`;
+    }
+    const hasMore = data.length === limit;
+
+    res.json({ data, nextCursor, hasMore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 router.get("/saved", authenticate, async (req, res) => {
   try {
-    const posts = await Post.find({ savedBy: req.user.uid })
+    const limit = parseLimit(req.query.limit);
+    const cursor = req.query.cursor || null;
+
+    const query = { savedBy: req.user.uid };
+    if (cursor) query._id = { $lt: cursor };
+
+    const data = await Post.find(query)
       .sort({ createdAt: -1 })
-      .limit(50);
-    res.json(posts);
+      .limit(limit);
+
+    const nextCursor = data.length === limit ? data[data.length - 1]._id : null;
+    const hasMore = data.length === limit;
+
+    res.json({ data, nextCursor, hasMore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 router.get("/user/:uid", authenticate, async (req, res) => {
   try {
-    const posts = await Post.find({ uid: req.params.uid })
+    const limit = parseLimit(req.query.limit);
+    const cursor = req.query.cursor || null;
+
+    const query = { uid: req.params.uid };
+    if (cursor) query._id = { $lt: cursor };
+
+    const data = await Post.find(query)
       .sort({ createdAt: -1 })
-      .limit(50);
-    res.json(posts);
+      .limit(limit);
+
+    const nextCursor = data.length === limit ? data[data.length - 1]._id : null;
+    const hasMore = data.length === limit;
+
+    res.json({ data, nextCursor, hasMore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
-
 
 router.post("/", authenticate, async (req, res) => {
   try {
@@ -88,24 +135,19 @@ router.post("/", authenticate, async (req, res) => {
       caption: caption?.trim() || "",
     });
 
-    
-
-    const me = await User.findOne({ uid: req.user.uid });
+const me = await User.findOne({ uid: req.user.uid });
     const followers = me?.followers || [];
     followers.forEach((followerUid) => {
       req.app.io.to(followerUid).emit("new-post", post);
     });
-    
 
-    req.app.io.to(req.user.uid).emit("new-post", post);
+req.app.io.to(req.user.uid).emit("new-post", post);
 
     res.status(201).json(post);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 router.delete("/:id", authenticate, async (req, res) => {
   try {
@@ -114,19 +156,13 @@ router.delete("/:id", authenticate, async (req, res) => {
     if (post.uid !== req.user.uid) return res.status(403).json({ error: "Forbidden" });
     await post.deleteOne();
 
-    
-
-    req.app.io.emit("post-deleted", { postId: req.params.id });
+req.app.io.emit("post-deleted", { postId: req.params.id });
 
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
-
 
 router.post("/:id/like", authenticate, async (req, res) => {
   try {
@@ -171,9 +207,7 @@ router.post("/:id/like", authenticate, async (req, res) => {
     }
     await post.save();
 
-    
-
-    req.app.io.emit("post-updated", {
+req.app.io.emit("post-updated", {
       postId: post._id.toString(),
       likeCount: post.likeCount,
       likes: post.likes,
@@ -184,8 +218,6 @@ router.post("/:id/like", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 router.post("/:id/save", authenticate, async (req, res) => {
   try {

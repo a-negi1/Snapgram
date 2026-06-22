@@ -1,19 +1,14 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const Story = require("../models/Story");
 const { authenticate } = require("../middleware/auth");
 
-
-
 router.get("/", authenticate, async (req, res) => {
   try {
-    
 
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    
-
-    const User = require("../models/User");
+const User = require("../models/User");
     const me = await User.findOne({ uid: req.user.uid });
     const allowedUids = [req.user.uid, ...(me?.following || [])];
 
@@ -30,9 +25,7 @@ router.get("/", authenticate, async (req, res) => {
       grouped[s.uid].stories.push(s);
     });
 
-    
-
-    const arr = Object.values(grouped).sort((a, b) => {
+const arr = Object.values(grouped).sort((a, b) => {
       if (a.uid === req.user.uid) return -1;
       if (b.uid === req.user.uid) return 1;
       return 0;
@@ -43,11 +36,6 @@ router.get("/", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
-
-
 
 router.post("/", authenticate, async (req, res) => {
   try {
@@ -60,9 +48,7 @@ router.post("/", authenticate, async (req, res) => {
       imageURL,
     });
 
-    
-
-    const User = require("../models/User");
+const User = require("../models/User");
     const me = await User.findOne({ uid: req.user.uid });
     const recipients = [req.user.uid, ...(me?.followers || [])];
     recipients.forEach((uid) => {

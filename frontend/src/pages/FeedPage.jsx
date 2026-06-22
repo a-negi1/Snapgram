@@ -1,19 +1,34 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { apiFetch } from "../api";
 import { getSocket } from "../socket";
 import { uploadToCloudinary } from "../utils";
 import PostCard from "../components/PostCard.jsx";
 import Avatar from "../components/Avatar.jsx";
+import { useCursorPagination } from "../hooks/useCursorPagination.js";
+
+
+function SkeletonCard() {
+  return (
+    <div className="skeleton-card">
+      <div className="skeleton-header">
+        <div className="skeleton-avatar" />
+        <div className="skeleton-line" style={{ width: "40%", height: 12 }} />
+      </div>
+      <div className="skeleton-image" />
+      <div className="skeleton-text">
+        <div className="skeleton-line" style={{ width: "70%" }} />
+        <div className="skeleton-line" style={{ width: "50%" }} />
+      </div>
+    </div>
+  );
+}
 
 export default function FeedPage({ currentUser, currentUserProfile, onProfileClick }) {
-  const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [stories, setStories] = useState([]);
   const [uploadingStory, setUploadingStory] = useState(false);
   const [viewingGroup, setViewingGroup] = useState(null);
   const [storyIndex, setStoryIndex] = useState(0);
   const [storyProgress, setStoryProgress] = useState(0);
-  
 
   const [seenStories, setSeenStories] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem("seenStories") || "[]")); }
@@ -24,27 +39,43 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
   const storiesBarRef = useRef(null);
   const dragRef = useRef({ active: false, startX: 0, scrollLeft: 0, moved: false });
 
-  
+
+  const feedFetchFn = useCallback(
+    (cursor) =>
+      apiFetch(`/api/posts/feed?limit=12${cursor ? `&cursor=${cursor}` : ""}`),
+
+    [currentUserProfile?.uid]
+  );
+
+  const {
+    items: posts,
+    loading,
+    loadingMore,
+    hasMore,
+    error: feedError,
+    loadMore,
+    reset: resetFeed,
+    sentinelRef,
+  } = useCursorPagination(feedFetchFn);
+
+
+  const [extraPosts, setExtraPosts] = useState([]);
+
+  const allPosts = [...extraPosts, ...posts].reduce((acc, p) => {
+    if (!acc.find((x) => x._id === p._id)) acc.push(p);
+    return acc;
+  }, []);
+
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      apiFetch("/api/posts/feed"),
-      apiFetch("/api/stories"),
-    ])
-      .then(([postsData, storiesData]) => {
-        setPosts(postsData);
-        setStories(storiesData);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  
-
-  
-
+    apiFetch("/api/stories")
+      .then(setStories)
+      .catch(console.error);
   }, [currentUserProfile?.uid]);
 
-  
+  useEffect(() => {
+    setExtraPosts([]);
+  }, [currentUserProfile?.uid]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -53,42 +84,29 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
     getSocket().then((s) => {
       sock = s;
 
-      
-
       s.on("new-post", (post) => {
-        setPosts((prev) => {
+        setExtraPosts((prev) => {
           if (prev.find((p) => p._id === post._id)) return prev;
           return [post, ...prev];
         });
       });
 
-      
-
       s.on("post-deleted", ({ postId }) => {
-        setPosts((prev) => prev.filter((p) => p._id !== postId));
-      });
+        setExtraPosts((prev) => prev.filter((p) => p._id !== postId));
 
-      
+      });
 
       s.on("post-updated", ({ postId, likeCount, likes }) => {
-        setPosts((prev) =>
-          prev.map((p) =>
-            p._id === postId ? { ...p, likeCount, likes } : p
-          )
+        setExtraPosts((prev) =>
+          prev.map((p) => p._id === postId ? { ...p, likeCount, likes } : p)
         );
       });
-
-      
 
       s.on("new-comment", ({ postId, commentCount }) => {
-        setPosts((prev) =>
-          prev.map((p) =>
-            p._id === postId ? { ...p, commentCount } : p
-          )
+        setExtraPosts((prev) =>
+          prev.map((p) => p._id === postId ? { ...p, commentCount } : p)
         );
       });
-
-      
 
       s.on("new-story", ({ uid, username, photoURL, story }) => {
         setStories((prev) => {
@@ -98,8 +116,6 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
             copy[idx] = { ...copy[idx], stories: [story, ...copy[idx].stories] };
           } else {
             const newGroup = { uid, username, photoURL, stories: [story] };
-            
-
             if (uid === currentUser.uid) return [newGroup, ...copy];
             return [...copy, newGroup];
           }
@@ -119,8 +135,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
     };
   }, [currentUser]);
 
-  
-
+ 
   useEffect(() => {
     if (!viewingGroup) return;
     setStoryProgress(0);
@@ -149,19 +164,18 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
   }
 
   function openStory(group) {
-    // Don't open story if user was dragging the bar
     if (dragRef.current.moved) return;
     setViewingGroup(group);
     setStoryIndex(0);
     setSeenStories((prev) => {
       const next = new Set(prev);
       next.add(group.uid);
-      try { localStorage.setItem("seenStories", JSON.stringify([...next])); } catch {}
+      try { localStorage.setItem("seenStories", JSON.stringify([...next])); } catch { }
       return next;
     });
   }
 
-  // Mouse drag-to-scroll handlers
+  
   function onBarMouseDown(e) {
     const bar = storiesBarRef.current;
     dragRef.current = { active: true, startX: e.pageX - bar.offsetLeft, scrollLeft: bar.scrollLeft, moved: false };
@@ -191,8 +205,6 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
           photoURL: currentUserProfile?.photoURL || "",
         }),
       });
-      
-
     } catch (err) {
       alert("Story upload failed: " + err.message);
     }
@@ -211,7 +223,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
 
   return (
     <div className="feed">
-      {}
+      {/* Stories bar */}
       <div className="stories-wrapper">
         <div
           className="stories-bar"
@@ -221,52 +233,83 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
           onMouseUp={onBarMouseUp}
           onMouseLeave={onBarMouseLeave}
         >
-        <div className="story-item" onClick={() => storyFileRef.current.click()} style={{ opacity: uploadingStory ? 0.6 : 1 }}>
-          <div className="story-add-ring">
-            <div className="story-avatar-inner">
-              <Avatar src={currentUserProfile?.photoURL} name={currentUserProfile?.username || "Me"} size={52} />
-            </div>
-            <div className="story-add-plus">{uploadingStory ? "…" : "+"}</div>
-          </div>
-          <span className="story-name">Your story</span>
-        </div>
-        <input ref={storyFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAddStory} />
-
-        {stories.map((group) => {
-          const isSeen = seenStories.has(group.uid);
-          const isOwn  = group.uid === currentUser?.uid;
-          return (
-            <div key={group.uid} className="story-item" onClick={() => openStory(group)}>
-              <div className={`story-avatar-ring ${isOwn ? "story-own-ring" : ""} ${isSeen && !isOwn ? "story-seen" : ""}`}>
-                <div className="story-avatar-inner">
-                  <Avatar src={group.photoURL} name={group.username} size={52} />
-                </div>
+          <div className="story-item" onClick={() => storyFileRef.current.click()} style={{ opacity: uploadingStory ? 0.6 : 1 }}>
+            <div className="story-add-ring">
+              <div className="story-avatar-inner">
+                <Avatar src={currentUserProfile?.photoURL} name={currentUserProfile?.username || "Me"} size={52} />
               </div>
-              <span className="story-name">{isOwn ? "You" : group.username}</span>
+              <div className="story-add-plus">{uploadingStory ? "…" : "+"}</div>
             </div>
-          );
-        })}
-        {stories.length === 0 && (
-          <div style={{ color: "var(--dark-gray)", fontSize: 13, alignSelf: "center", paddingLeft: 8 }}>No stories yet</div>
-        )}
+            <span className="story-name">Your story</span>
+          </div>
+          <input ref={storyFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAddStory} />
+
+          {stories.map((group) => {
+            const isSeen = seenStories.has(group.uid);
+            const isOwn = group.uid === currentUser?.uid;
+            return (
+              <div key={group.uid} className="story-item" onClick={() => openStory(group)}>
+                <div className={`story-avatar-ring ${isOwn ? "story-own-ring" : ""} ${isSeen && !isOwn ? "story-seen" : ""}`}>
+                  <div className="story-avatar-inner">
+                    <Avatar src={group.photoURL} name={group.username} size={52} />
+                  </div>
+                </div>
+                <span className="story-name">{isOwn ? "You" : group.username}</span>
+              </div>
+            );
+          })}
+          {stories.length === 0 && (
+            <div style={{ color: "var(--dark-gray)", fontSize: 13, alignSelf: "center", paddingLeft: 8 }}>No stories yet</div>
+          )}
         </div>
       </div>
 
-      {}
+      
       {loading ? (
         <div className="loading-spinner">Loading…</div>
-      ) : posts.length === 0 ? (
+      ) : allPosts.length === 0 && !hasMore ? (
         <div className="empty-state">
           <h3>Nothing here yet</h3>
           <p>Follow people to see their posts here.</p>
         </div>
       ) : (
-        posts.map((post) => (
-          <PostCard key={post._id} post={post} currentUser={currentUser} currentUserProfile={currentUserProfile} onProfileClick={onProfileClick} />
-        ))
+        <>
+          {allPosts.map((post) => (
+            <PostCard
+              key={post._id}
+              post={post}
+              currentUser={currentUser}
+              currentUserProfile={currentUserProfile}
+              onProfileClick={onProfileClick}
+            />
+          ))}
+
+          
+          {hasMore && (
+            <div ref={sentinelRef} style={{ height: 1 }} />
+          )}
+
+
+          {loadingMore && (
+            <>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </>
+          )}
+
+
+          {feedError && !loadingMore && (
+            <div className="load-more-retry">
+              <span>Failed to load.</span>
+              <button onClick={loadMore}>Tap to retry</button>
+            </div>
+          )}
+
+        </>
       )}
 
-      {}
+
       {viewingGroup && (
         <div className="story-viewer-overlay" onClick={closeStory}>
           <div className="story-viewer" onClick={(e) => e.stopPropagation()}>

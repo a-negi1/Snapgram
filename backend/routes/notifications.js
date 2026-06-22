@@ -1,19 +1,29 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
 
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 50;
 
-
-
+function parseLimit(raw) {
+  const n = parseInt(raw);
+  if (!n || n < 1) return DEFAULT_LIMIT;
+  return Math.min(n, MAX_LIMIT);
+}
 
 router.get("/", authenticate, async (req, res) => {
   try {
-    const notifs = await Notification.find({ toUid: req.user.uid })
-      .sort({ createdAt: -1 })
-      .limit(200);
+    const limit = parseLimit(req.query.limit);
+    const cursor = req.query.cursor || null;
 
-    // Deduplicate like notifications: keep only the latest per (fromUid, postId)
+    const query = { toUid: req.user.uid };
+    if (cursor) query._id = { $lt: cursor };
+
+    const notifs = await Notification.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
     const seen = new Set();
     const toDelete = [];
     const unique = [];
@@ -34,15 +44,14 @@ router.get("/", authenticate, async (req, res) => {
       await Notification.deleteMany({ _id: { $in: toDelete } });
     }
 
-    res.json(unique.slice(0, 50));
+    const nextCursor = notifs.length === limit ? notifs[notifs.length - 1]._id : null;
+    const hasMore = notifs.length === limit;
+
+    res.json({ data: unique, nextCursor, hasMore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
-
 
 router.get("/unread-count", authenticate, async (req, res) => {
   try {
@@ -55,10 +64,6 @@ router.get("/unread-count", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
-
 
 router.put("/mark-read", authenticate, async (req, res) => {
   try {

@@ -1,4 +1,4 @@
-
+﻿
 require("dotenv").config();
 const mongoose = require("mongoose");
 
@@ -9,14 +9,10 @@ async function main() {
   const db = mongoose.connection.db;
   const collection = db.collection("users");
 
-  
-
-  const indexes = await collection.indexes();
+const indexes = await collection.indexes();
   console.log("Current indexes:", indexes.map(i => i.name));
 
-  
-
-  const validIndexes = new Set(["_id_", "uid_1", "username_1"]);
+const validIndexes = new Set(["_id_", "uid_1", "username_1"]);
   for (const idx of indexes) {
     if (!validIndexes.has(idx.name)) {
       console.log(`⚠️  Dropping stale index: ${idx.name}`);

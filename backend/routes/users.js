@@ -1,10 +1,8 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
-
-
 
 router.get("/me", authenticate, async (req, res) => {
   try {
@@ -16,37 +14,26 @@ router.get("/me", authenticate, async (req, res) => {
   }
 });
 
-
-
-
-
 router.post("/me", authenticate, async (req, res) => {
   try {
     const { username, displayName, photoURL, bio } = req.body;
 
-    
-
-    let user = await User.findOne({ uid: req.user.uid });
+let user = await User.findOne({ uid: req.user.uid });
     if (user) return res.json(user);
 
-    
-
-    
-
-    const base = (username || req.user.email?.split("@")[0] || "user")
+const base = (username || req.user.email?.split("@")[0] || "user")
       .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "_")   
+      .replace(/[^a-z0-9_]/g, "_")
 
-      .replace(/_+/g, "_")           
+      .replace(/_+/g, "_")
 
-      .slice(0, 28);                 
+      .slice(0, 28);
 
-
-    const candidates = [
+const candidates = [
       base,
       `${base}_${req.user.uid.slice(0, 5)}`,
       `${base}_${req.user.uid.slice(0, 8)}`,
-      `user_${req.user.uid}`,        
+      `user_${req.user.uid}`,
 
     ];
 
@@ -62,33 +49,26 @@ router.post("/me", authenticate, async (req, res) => {
         return res.status(201).json(user);
       } catch (err) {
         if (err.code === 11000 && err.keyValue?.username) {
-          
 
           continue;
         }
         if (err.code === 11000 && err.keyValue?.uid) {
-          
 
           user = await User.findOne({ uid: req.user.uid });
           return res.json(user);
         }
-        throw err; 
+        throw err;
 
       }
     }
 
-    
-
-    res.status(500).json({ error: "Could not create user profile" });
+res.status(500).json({ error: "Could not create user profile" });
 
   } catch (err) {
     console.error("POST /api/users/me error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
 
 router.put("/me", authenticate, async (req, res) => {
   try {
@@ -112,28 +92,32 @@ router.put("/me", authenticate, async (req, res) => {
   }
 });
 
-
-
 router.get("/suggestions", authenticate, async (req, res) => {
   try {
     const me = await User.findOne({ uid: req.user.uid });
     const exclude = [req.user.uid, ...(me?.following || [])];
-    const users = await User.find({ uid: { $nin: exclude } }).limit(10);
-    res.json(users);
+    const cursor = req.query.cursor || null;
+
+    const query = { uid: { $nin: exclude } };
+    if (cursor) query._id = { $gt: cursor };
+
+    const data = await User.find(query).limit(10);
+
+    const nextCursor = data.length === 10 ? data[data.length - 1]._id : null;
+    const hasMore = data.length === 10;
+
+    res.json({ data, nextCursor, hasMore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-
-
 router.get("/search", authenticate, async (req, res) => {
   try {
     const q = (req.query.q || "").toLowerCase().trim();
     if (!q) return res.json([]);
-    
 
-    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const users = await User.find({
       username: { $regex: `^${escaped}`, $options: "i" },
     }).limit(10);
@@ -142,8 +126,6 @@ router.get("/search", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 router.get("/:uid", authenticate, async (req, res) => {
   try {
@@ -154,10 +136,6 @@ router.get("/:uid", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
-
 
 router.post("/:uid/follow", authenticate, async (req, res) => {
   const targetUid = req.params.uid;
@@ -185,9 +163,8 @@ router.post("/:uid/follow", authenticate, async (req, res) => {
         fromPhotoURL: me.photoURL || "",
         type: "follow",
       });
-      
 
-      req.app.io.to(targetUid).emit("notification", notif);
+req.app.io.to(targetUid).emit("notification", notif);
       return res.json({ following: true });
     }
   } catch (err) {
@@ -195,27 +172,45 @@ router.post("/:uid/follow", authenticate, async (req, res) => {
   }
 });
 
-
-
 router.get("/:uid/followers", authenticate, async (req, res) => {
   try {
     const target = await User.findOne({ uid: req.params.uid });
     if (!target) return res.status(404).json({ error: "User not found" });
-    const followers = await User.find({ uid: { $in: target.followers } }).limit(50);
-    res.json(followers);
+
+    const cursor = req.query.cursor || null;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+
+    const query = { uid: { $in: target.followers } };
+    if (cursor) query._id = { $gt: cursor };
+
+    const data = await User.find(query).limit(limit);
+
+    const nextCursor = data.length === limit ? data[data.length - 1]._id : null;
+    const hasMore = data.length === limit;
+
+    res.json({ data, nextCursor, hasMore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-
-
 router.get("/:uid/following", authenticate, async (req, res) => {
   try {
     const target = await User.findOne({ uid: req.params.uid });
     if (!target) return res.status(404).json({ error: "User not found" });
-    const following = await User.find({ uid: { $in: target.following } }).limit(50);
-    res.json(following);
+
+    const cursor = req.query.cursor || null;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+
+    const query = { uid: { $in: target.following } };
+    if (cursor) query._id = { $gt: cursor };
+
+    const data = await User.find(query).limit(limit);
+
+    const nextCursor = data.length === limit ? data[data.length - 1]._id : null;
+    const hasMore = data.length === limit;
+
+    res.json({ data, nextCursor, hasMore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

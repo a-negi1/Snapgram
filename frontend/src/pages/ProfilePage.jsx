@@ -1,13 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { apiFetch } from "../api";
 import { uploadToCloudinary } from "../utils";
 import Avatar from "../components/Avatar.jsx";
 import PostCard from "../components/PostCard.jsx";
+import { useCursorPagination } from "../hooks/useCursorPagination.js";
+
+function SkeletonGridItem() {
+  return <div className="skeleton-grid-item" />;
+}
 
 export default function ProfilePage({ profileUid, currentUser, currentUserProfile, onProfileClick, onProfileUpdated }) {
   const [profile, setProfile] = useState(null);
-  const [posts, setPosts] = useState([]);
-  const [savedPosts, setSavedPosts] = useState([]);
   const [activeTab, setActiveTab] = useState("posts");
   const [following, setFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -27,66 +30,74 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
 
   const isOwnProfile = currentUser?.uid === profileUid;
 
+  const postsFetchFn = useCallback(
+    (cursor) =>
+      apiFetch(`/api/posts/user/${profileUid}?limit=12${cursor ? `&cursor=${cursor}` : ""}`),
+    [profileUid]
+  );
 
+  const {
+    items: posts,
+    loading: postsLoading,
+    loadingMore: postsLoadingMore,
+    hasMore: postsHasMore,
+    error: postsError,
+    loadMore: postsLoadMore,
+    reset: resetPosts,
+    sentinelRef: postsSentinelRef,
+  } = useCursorPagination(postsFetchFn);
 
+  const savedFetchFn = useCallback(
+    (cursor) =>
+      apiFetch(`/api/posts/saved?limit=12${cursor ? `&cursor=${cursor}` : ""}`),
+    [currentUser?.uid]
+  );
 
+  const {
+    items: savedPosts,
+    loading: savedLoading,
+    loadingMore: savedLoadingMore,
+    hasMore: savedHasMore,
+    error: savedError,
+    loadMore: savedLoadMore,
+    reset: resetSaved,
+    sentinelRef: savedSentinelRef,
+  } = useCursorPagination(savedFetchFn);
 
+  useEffect(() => {
+    setActiveTab("posts");
+    setProfile(null);
+    setLoading(true);
+  }, [profileUid]);
 
-
-
+  useEffect(() => {
+    if (activeTab === "saved" && savedPosts.length === 0) resetSaved();
+  }, [activeTab]);
 
   useEffect(() => {
     if (!profileUid || !isOwnProfile) return;
-    setActiveTab("posts");
-
-    if (!currentUserProfile) {
-
-
-      setLoading(true);
-      return;
-    }
-
-
-
+    if (!currentUserProfile) { setLoading(true); return; }
     setProfile(currentUserProfile);
-    setLoading(true);
-    apiFetch(`/api/posts/user/${profileUid}`)
-      .then(setPosts)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    setLoading(false);
   }, [profileUid, isOwnProfile, currentUserProfile]);
-
-
 
   useEffect(() => {
     if (!profileUid || isOwnProfile) return;
     setLoading(true);
-    setProfile(null);
-    setActiveTab("posts");
 
     const fetchUser = () => apiFetch(`/api/users/${profileUid}`).catch(async () => {
       await new Promise((r) => setTimeout(r, 1500));
       return apiFetch(`/api/users/${profileUid}`);
     });
 
-    Promise.all([fetchUser(), apiFetch(`/api/posts/user/${profileUid}`)])
-      .then(([profileData, postsData]) => {
+    fetchUser()
+      .then((profileData) => {
         setProfile(profileData);
-        setPosts(postsData);
         setFollowing(currentUser && (profileData.followers || []).includes(currentUser.uid));
+        setLoading(false);
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [profileUid, isOwnProfile, currentUser]);
-
-
-
-  useEffect(() => {
-    if (activeTab !== "saved" || !currentUser || currentUser.uid !== profileUid) return;
-    apiFetch("/api/posts/saved")
-      .then(setSavedPosts)
       .catch(console.error);
-  }, [activeTab, currentUser, profileUid]);
+  }, [profileUid, isOwnProfile, currentUser]);
 
   async function toggleFollow() {
     if (!currentUser || !profile) return;
@@ -153,19 +164,26 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
     setFollowModalType(type);
     setModalLoading(true);
     try {
-      const users = await apiFetch(`/api/users/${profileUid}/${type}`);
-      setFollowModalUsers(users);
+      const res = await apiFetch(`/api/users/${profileUid}/${type}`);
+      setFollowModalUsers(res.data || res);
     } catch (e) {
       console.error(e);
     }
     setModalLoading(false);
   }
 
+  const displayPosts = activeTab === "saved" ? savedPosts : posts;
+  const displayLoading = activeTab === "saved" ? savedLoading : postsLoading;
+  const displayLoadingMore = activeTab === "saved" ? savedLoadingMore : postsLoadingMore;
+  const displayHasMore = activeTab === "saved" ? savedHasMore : postsHasMore;
+  const displayError = activeTab === "saved" ? savedError : postsError;
+  const displayLoadMore = activeTab === "saved" ? savedLoadMore : postsLoadMore;
+  const displaySentinelRef = activeTab === "saved" ? savedSentinelRef : postsSentinelRef;
+
   if (loading) return <div className="loading-spinner">Loading profile…</div>;
   if (!profile) return <div className="empty-state"><h3>User not found</h3></div>;
 
   const isOwn = currentUser?.uid === profileUid;
-  const displayPosts = activeTab === "saved" ? savedPosts : posts;
 
   return (
     <>
@@ -193,7 +211,7 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
               ) : null}
             </div>
             <div className="profile-stats">
-              <div className="profile-stat"><strong>{posts.length}</strong> posts</div>
+              <div className="profile-stat"><strong>{profile.postCount ?? (postsHasMore ? `${posts.length}+` : posts.length)}</strong> posts</div>
               <div className="profile-stat" style={{ cursor: "pointer" }} onClick={() => openFollowModal("followers")}>
                 <strong>{(profile.followers || []).length}</strong> followers
               </div>
@@ -206,7 +224,6 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
           </div>
         </div>
 
-        { }
         <div className="profile-tabs">
           <button className={`profile-tab ${activeTab === "posts" ? "active" : ""}`} onClick={() => setActiveTab("posts")}>
             <GridIcon /> Posts
@@ -218,48 +235,70 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
           )}
         </div>
 
-        {displayPosts.length === 0 ? (
+        {displayLoading ? (
+          <div className="loading-spinner">Loading…</div>
+        ) : displayPosts.length === 0 && !displayHasMore ? (
           <div className="empty-state">
             <h3>{activeTab === "saved" ? "No saved posts" : "No posts yet"}</h3>
             {activeTab === "saved" && <p>Posts you save will appear here.</p>}
           </div>
         ) : (
-          <div className="profile-grid">
-            {displayPosts.map((p) => (
-              <div key={p._id} className="profile-grid-item" onClick={() => setLightboxPost(p)}>
-                {p.imageURL ? (
-                  p.mediaType === "video" ? (
-                    <>
-                      <video
-                        src={p.imageURL}
-                        preload="metadata"
-                        muted
-                        playsInline
-                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
-                      />
-                      <div style={{ position: "absolute", top: 6, right: 8, background: "rgba(0,0,0,0.55)", borderRadius: 4, padding: "2px 5px", display: "flex", alignItems: "center", gap: 3 }}>
-                        <svg viewBox="0 0 10 10" fill="white" width="10" height="10"><polygon points="2,1 9,5 2,9" /></svg>
-                      </div>
-                    </>
+          <>
+            <div className="profile-grid">
+              {displayPosts.map((p) => (
+                <div key={p._id} className="profile-grid-item" onClick={() => setLightboxPost(p)}>
+                  {p.imageURL ? (
+                    p.mediaType === "video" ? (
+                      <>
+                        <video
+                          src={p.imageURL}
+                          preload="metadata"
+                          muted
+                          playsInline
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
+                        />
+                        <div style={{ position: "absolute", top: 6, right: 8, background: "rgba(0,0,0,0.55)", borderRadius: 4, padding: "2px 5px", display: "flex", alignItems: "center", gap: 3 }}>
+                          <svg viewBox="0 0 10 10" fill="white" width="10" height="10"><polygon points="2,1 9,5 2,9" /></svg>
+                        </div>
+                      </>
+                    ) : (
+                      <img src={p.imageURL} alt="post" />
+                    )
                   ) : (
-                    <img src={p.imageURL} alt="post" />
-                  )
-                ) : (
-                  <div style={{ width: "100%", height: "100%", background: "var(--light-gray)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ fontSize: 32 }}>📷</span>
+                    <div style={{ width: "100%", height: "100%", background: "var(--light-gray)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontSize: 32 }}>📷</span>
+                    </div>
+                  )}
+                  <div className="grid-overlay">
+                    <span>❤️ {p.likeCount || 0}</span>
+                    <span>💬 {p.commentCount || 0}</span>
                   </div>
-                )}
-                <div className="grid-overlay">
-                  <span>❤️ {p.likeCount || 0}</span>
-                  <span>💬 {p.commentCount || 0}</span>
                 </div>
+              ))}
+
+              {displayLoadingMore && (
+                <>
+                  <SkeletonGridItem />
+                  <SkeletonGridItem />
+                  <SkeletonGridItem />
+                </>
+              )}
+            </div>
+
+            {displayHasMore && (
+              <div ref={displaySentinelRef} style={{ height: 1 }} />
+            )}
+
+            {displayError && !displayLoadingMore && (
+              <div className="load-more-retry">
+                <span>Failed to load.</span>
+                <button onClick={displayLoadMore}>Tap to retry</button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 
-      { }
       {lightboxPost && (
         <div className="modal-overlay" onClick={() => setLightboxPost(null)}>
           <div className="lightbox-card" onClick={(e) => e.stopPropagation()}>
@@ -269,8 +308,8 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
               currentUserProfile={currentUserProfile}
               onProfileClick={(uid) => { setLightboxPost(null); onProfileClick(uid); }}
               onPostDeleted={(id) => {
-                setPosts((ps) => ps.filter((p) => p._id !== id));
-                setSavedPosts((ps) => ps.filter((p) => p._id !== id));
+                resetPosts();
+                resetSaved();
                 setLightboxPost(null);
               }}
             />
@@ -278,7 +317,6 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
         </div>
       )}
 
-      { }
       {showEditModal && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
           <div className="new-post-modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
@@ -308,7 +346,6 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
         </div>
       )}
 
-      { }
       {followModalType && (
         <div className="modal-overlay" onClick={() => setFollowModalType(null)}>
           <div className="new-post-modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>

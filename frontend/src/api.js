@@ -1,16 +1,14 @@
-import { auth } from "./firebase";
+﻿import { auth } from "./firebase";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-
 
 export async function apiFetch(path, options = {}) {
   let token = null;
   try {
     token = await auth.currentUser?.getIdToken();
-  } catch (_) {
-    
+  } catch () {
 
-  }
+}
 
   const headers = {
     "Content-Type": "application/json",

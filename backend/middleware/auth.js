@@ -1,6 +1,4 @@
-const admin = require("firebase-admin");
-
-
+﻿const admin = require("firebase-admin");
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -11,7 +9,6 @@ if (!admin.apps.length) {
     }),
   });
 }
-
 
 async function authenticate(req, res, next) {
   const header = req.headers.authorization || "";

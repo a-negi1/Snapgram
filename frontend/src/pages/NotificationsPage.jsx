@@ -1,43 +1,46 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useCallback } from "react";
 import { apiFetch } from "../api";
 import { getSocket } from "../socket";
 import Avatar from "../components/Avatar.jsx";
 import { timeAgo } from "../utils";
+import { useCursorPagination } from "../hooks/useCursorPagination.js";
 
 export default function NotificationsPage({ currentUser, onProfileClick }) {
-  const [notifs, setNotifs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  
+  const notifFetchFn = useCallback(
+    (cursor) =>
+      apiFetch(`/api/notifications?limit=20${cursor ? `&cursor=${cursor}` : ""}`),
+    
+    [currentUser?.uid]
+  );
+
+  const {
+    items: notifs,
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    loadMore,
+    reset,
+    sentinelRef,
+  } = useCursorPagination(notifFetchFn);
+
+useEffect(() => {
+    if (!currentUser) return;
+
+if (!loading) {
+      apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => {});
+    }
+  }, [loading, currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
-
-    
-
-    apiFetch("/api/notifications")
-      .then((data) => {
-        setNotifs(data);
-        setLoading(false);
-        
-
-        apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => {});
-      })
-      .catch(() => setLoading(false));
-
-    
-
     let sock;
     getSocket().then((s) => {
       sock = s;
       s.on("notification", (notif) => {
-        setNotifs((prev) => {
-          // Remove any existing notif with same fromUid + type + postId to avoid duplicates
-          const filtered = prev.filter(
-            (n) => !(n.fromUid === notif.fromUid && n.type === notif.type && String(n.postId) === String(notif.postId))
-          );
-          return [{ ...notif, read: true }, ...filtered];
-        });
-        
 
+reset();
         apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => {});
       });
     });
@@ -45,8 +48,7 @@ export default function NotificationsPage({ currentUser, onProfileClick }) {
     return () => {
       if (sock) sock.off("notification");
     };
-  }, [currentUser]);
-
+  }, [currentUser, reset]);
 
   function notifText(n) {
     if (n.type === "like") return "liked your post.";
@@ -63,37 +65,58 @@ export default function NotificationsPage({ currentUser, onProfileClick }) {
         <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Notifications</h2>
       </div>
 
-      {notifs.length === 0 ? (
+      {notifs.length === 0 && !hasMore ? (
         <div className="empty-state">
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔔</div>
           <h3>No notifications yet</h3>
           <p>When someone likes or comments on your posts, you'll see it here.</p>
         </div>
       ) : (
-        <div className="notif-list">
-          {notifs.map((n) => (
-            <div key={n._id} className={`notif-item ${!n.read ? "notif-unread" : ""}`}>
-              <div style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => onProfileClick(n.fromUid)}>
-                <Avatar src={n.fromPhotoURL} name={n.fromUsername} size={44} />
+        <>
+          <div className="notif-list">
+            {notifs.map((n) => (
+              <div key={n._id} className={`notif-item ${!n.read ? "notif-unread" : ""}`}>
+                <div style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => onProfileClick(n.fromUid)}>
+                  <Avatar src={n.fromPhotoURL} name={n.fromUsername} size={44} />
+                </div>
+                <div className="notif-body">
+                  <span className="notif-username" onClick={() => onProfileClick(n.fromUid)}>{n.fromUsername}</span>
+                  {" "}
+                  <span className="notif-text">{notifText(n)}</span>
+                  <div className="notif-time">{timeAgo(n.createdAt)}</div>
+                </div>
+                {n.postImageURL && (
+                  <img
+                    src={n.postImageURL}
+                    alt=""
+                    className="notif-thumb"
+                    onError={(e) => { e.target.style.display = "none"; }}
+                  />
+                )}
+                {!n.read && <div className="notif-dot-new" />}
               </div>
-              <div className="notif-body">
-                <span className="notif-username" onClick={() => onProfileClick(n.fromUid)}>{n.fromUsername}</span>
-                {" "}
-                <span className="notif-text">{notifText(n)}</span>
-                <div className="notif-time">{timeAgo(n.createdAt)}</div>
-              </div>
-              {n.postImageURL && (
-                <img
-                  src={n.postImageURL}
-                  alt=""
-                  className="notif-thumb"
-                  onError={(e) => { e.target.style.display = "none"; }}
-                />
-              )}
-              {!n.read && <div className="notif-dot-new" />}
+            ))}
+          </div>
+
+          {/* Sentinel */}
+          {hasMore && (
+            <div ref={sentinelRef} style={{ height: 1 }} />
+          )}
+
+          {/* Loading more indicator */}
+          {loadingMore && (
+            <div className="loading-spinner" style={{ padding: "12px 0", fontSize: 13 }}>Loading more…</div>
+          )}
+
+          {/* Error + retry */}
+          {error && !loadingMore && (
+            <div className="load-more-retry">
+              <span>Failed to load.</span>
+              <button onClick={loadMore}>Tap to retry</button>
             </div>
-          ))}
-        </div>
+          )}
+
+        </>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+﻿const mongoose = require("mongoose");
 
 const storySchema = new mongoose.Schema(
   {
@@ -6,9 +6,8 @@ const storySchema = new mongoose.Schema(
     username: { type: String, required: true },
     photoURL: { type: String, default: "" },
     imageURL: { type: String, required: true },
-    
 
-    createdAt: { type: Date, default: Date.now, expires: 86400 },
+createdAt: { type: Date, default: Date.now, expires: 86400 },
   }
 );
 
