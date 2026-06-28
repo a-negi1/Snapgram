@@ -12,7 +12,11 @@ export function useCursorPagination(fetchFn) {
   const fetchFnRef = useRef(fetchFn);
   useEffect(() => { fetchFnRef.current = fetchFn; }, [fetchFn]);
 
-  const sentinelRef = useRef(null);
+
+  const [sentinelEl, setSentinelEl] = useState(null);
+  const sentinelRef = useCallback((node) => {
+    setSentinelEl(node);
+  }, []);
 
   const doFetch = useCallback(async (cursor, isInitial) => {
     if (fetchingRef.current) return;
@@ -70,9 +74,9 @@ export function useCursorPagination(fetchFn) {
     doFetch(null, true);
   }, [doFetch]);
 
+
   useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
+    if (!sentinelEl || !hasMore) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -82,9 +86,9 @@ export function useCursorPagination(fetchFn) {
       },
       { threshold: 0.1 }
     );
-    observer.observe(sentinel);
+    observer.observe(sentinelEl);
     return () => observer.disconnect();
-  }, [hasMore, doFetch]);
+  }, [sentinelEl, hasMore, doFetch]);
 
   return {
     items,

@@ -1,4 +1,4 @@
-﻿const admin = require("firebase-admin");
+const admin = require("firebase-admin");
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -15,7 +15,7 @@ async function authenticate(req, res, next) {
   if (!header.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing or invalid Authorization header" });
   }
-  const token = header.split("Bearer ")[1];
+  const token = header.slice(7).trim();
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     req.user = { uid: decoded.uid, email: decoded.email };

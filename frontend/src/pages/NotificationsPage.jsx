@@ -1,4 +1,4 @@
-﻿import { useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { apiFetch } from "../api";
 import { getSocket } from "../socket";
 import Avatar from "../components/Avatar.jsx";
@@ -25,13 +25,10 @@ export default function NotificationsPage({ currentUser, onProfileClick }) {
     sentinelRef,
   } = useCursorPagination(notifFetchFn);
 
-useEffect(() => {
+  useEffect(() => {
     if (!currentUser) return;
-
-if (!loading) {
-      apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => {});
-    }
-  }, [loading, currentUser]);
+    apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => {});
+  }, [currentUser?.uid]);
 
   useEffect(() => {
     if (!currentUser) return;

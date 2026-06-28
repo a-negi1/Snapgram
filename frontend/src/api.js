@@ -7,8 +7,8 @@ export async function apiFetch(path, options = {}) {
   try {
     token = await auth.currentUser?.getIdToken();
   } catch (e) {
-
-}
+    console.warn("[apiFetch] Could not get auth token:", e?.message);
+  }
 
   const headers = {
     "Content-Type": "application/json",

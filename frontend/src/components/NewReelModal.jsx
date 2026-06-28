@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { apiFetch } from "../api";
 import { uploadToCloudinary } from "../utils";
 
@@ -13,7 +13,7 @@ export default function NewReelModal({ currentUser, currentUserProfile, onClose,
   const [uploadProgress, setUploadProgress] = useState(null);
   const [error, setError]                 = useState("");
   const fileRef                           = useRef();
-  const previewVideoRef                   = useRef();
+  const previewUrlRef                     = useRef(null);
 
   function handleFile(f) {
     if (!f) return;
@@ -39,8 +39,12 @@ const url = URL.createObjectURL(f);
         if (fileRef.current) fileRef.current.value = "";
         return;
       }
+
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      const previewUrl = URL.createObjectURL(f);
+      previewUrlRef.current = previewUrl;
       setFile(f);
-      setPreview(URL.createObjectURL(f));
+      setPreview(previewUrl);
     };
     vid.onerror = () => {
       URL.revokeObjectURL(url);
@@ -50,6 +54,10 @@ const url = URL.createObjectURL(f);
 
   function clearFile(e) {
     e.stopPropagation();
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
     setFile(null);
     setPreview(null);
     setError("");
@@ -105,7 +113,6 @@ const url = URL.createObjectURL(f);
             {preview ? (
               <>
                 <video
-                  ref={previewVideoRef}
                   src={preview}
                   className="upload-preview"
                   style={{ aspectRatio: "9/16", objectFit: "cover", background: "#000", maxHeight: 320 }}

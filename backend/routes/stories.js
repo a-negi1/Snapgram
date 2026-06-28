@@ -1,14 +1,14 @@
-﻿const express = require("express");
+const express = require("express");
 const router = express.Router();
 const Story = require("../models/Story");
+const User = require("../models/User");
 const { authenticate } = require("../middleware/auth");
 
 router.get("/", authenticate, async (req, res) => {
   try {
 
-const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-const User = require("../models/User");
     const me = await User.findOne({ uid: req.user.uid });
     const allowedUids = [req.user.uid, ...(me?.following || [])];
 
@@ -48,7 +48,6 @@ router.post("/", authenticate, async (req, res) => {
       imageURL,
     });
 
-const User = require("../models/User");
     const me = await User.findOne({ uid: req.user.uid });
     const recipients = [req.user.uid, ...(me?.followers || [])];
     recipients.forEach((uid) => {

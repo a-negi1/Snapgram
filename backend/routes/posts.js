@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
+const { Types: { ObjectId } } = mongoose;
 const Post = require("../models/Post");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
@@ -65,23 +67,109 @@ function parseLimit(raw, defaultVal = 12, max = 30) {
   return Math.min(n, max);
 }
 
+function encodeCursor(payload) {
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
+function decodeCursor(raw) {
+  try {
+    return JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
 router.get("/feed", authenticate, async (req, res) => {
   try {
     const me = await User.findOne({ uid: req.user.uid });
     const uids = [...new Set([req.user.uid, ...(me?.following || [])])].slice(0, 30);
 
     const limit = parseLimit(req.query.limit);
-    const cursor = req.query.cursor || null;
+    const cursorParam = req.query.cursor || null;
+    const cursorData = cursorParam ? decodeCursor(cursorParam) : null;
 
-    const query = { uid: { $in: uids } };
-    if (cursor) query._id = { $lt: cursor };
+    const pipeline = [
+      {
+        $match: {
+          uid: { $in: uids },
+        },
+      },
+      {
+        $addFields: {
+          saveCount: { $size: "$savedBy" },
+          ageHours: {
+            $divide: [
+              { $subtract: [new Date(), "$createdAt"] },
+              3_600_000,
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          engagementScore: {
+            $add: [
+              { $multiply: ["$likeCount",    1] },
+              { $multiply: ["$commentCount", 2] },
+              { $multiply: ["$saveCount",    3] },
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          timePenalty: {
+            $multiply: [
+              { $add: ["$ageHours", 2] },
+              { $sqrt: { $add: ["$ageHours", 2] } },
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          feedScore: {
+            $cond: {
+              if:   { $gt: ["$timePenalty", 0] },
+              then: { $divide: ["$engagementScore", "$timePenalty"] },
+              else: 0,
+            },
+          },
+        },
+      },
+    ];
 
-    const data = await Post.find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit);
+    if (cursorData) {
+      const { score: lastScore, date: lastDate, id: lastId } = cursorData;
+      pipeline.push({
+        $match: {
+          $or: [
+            { feedScore: { $lt: lastScore } },
+            { feedScore: lastScore, createdAt: { $lt: new Date(lastDate) } },
+            { feedScore: lastScore, createdAt: new Date(lastDate), _id: { $lt: new ObjectId(lastId) } },
+          ],
+        },
+      });
+    }
 
-    const nextCursor = data.length === limit ? data[data.length - 1]._id : null;
+    pipeline.push({ $sort: { feedScore: -1, createdAt: -1, _id: -1 } });
+    pipeline.push({ $limit: limit });
+    pipeline.push({ $project: { ageHours: 0, engagementScore: 0, timePenalty: 0 } });
+
+    const data = await Post.aggregate(pipeline);
+
+    let nextCursor = null;
+    if (data.length === limit) {
+      const last = data[data.length - 1];
+      nextCursor = encodeCursor({
+        score: last.feedScore,
+        date:  last.createdAt,
+        id:    String(last._id),
+      });
+    }
+
     const hasMore = data.length === limit;
+    data.forEach((d) => delete d.feedScore);
 
     res.json({ data, nextCursor, hasMore });
   } catch (err) {
@@ -93,30 +181,78 @@ router.get("/explore", authenticate, async (req, res) => {
   try {
     const limit = parseLimit(req.query.limit);
     const cursorParam = req.query.cursor || null;
+    const cursorData = cursorParam ? decodeCursor(cursorParam) : null;
 
-    let query = {};
-    if (cursorParam) {
-      const parts = cursorParam.split("_");
-      const cursorId = parts.pop();
-      const cursorLikeCount = parseInt(parts.join("_")) || 0;
-      query = {
-        $or: [
-          { likeCount: { $lt: cursorLikeCount } },
-          { likeCount: cursorLikeCount, _id: { $lt: cursorId } },
-        ],
-      };
+    const pipeline = [
+      {
+        $addFields: {
+          saveCount: { $size: "$savedBy" },
+          ageHours: {
+            $divide: [{ $subtract: [new Date(), "$createdAt"] }, 3_600_000],
+          },
+        },
+      },
+      {
+        $addFields: {
+          engagementScore: {
+            $add: [
+              { $multiply: ["$likeCount",    1] },
+              { $multiply: ["$commentCount", 2] },
+              { $multiply: ["$saveCount",    3] },
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          timePenalty: {
+            $multiply: [
+              { $add: ["$ageHours", 2] },
+              { $sqrt: { $add: ["$ageHours", 2] } },
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          feedScore: {
+            $cond: {
+              if:   { $gt: ["$timePenalty", 0] },
+              then: { $divide: ["$engagementScore", "$timePenalty"] },
+              else: 0,
+            },
+          },
+        },
+      },
+    ];
+
+    if (cursorData) {
+      const { score: lastScore, date: lastDate, id: lastId } = cursorData;
+      pipeline.push({
+        $match: {
+          $or: [
+            { feedScore: { $lt: lastScore } },
+            { feedScore: lastScore, createdAt: { $lt: new Date(lastDate) } },
+            { feedScore: lastScore, createdAt: new Date(lastDate), _id: { $lt: new ObjectId(lastId) } },
+          ],
+        },
+      });
     }
 
-    const data = await Post.find(query)
-      .sort({ likeCount: -1, _id: -1 })
-      .limit(limit);
+    pipeline.push({ $sort: { feedScore: -1, createdAt: -1, _id: -1 } });
+    pipeline.push({ $limit: limit });
+    pipeline.push({ $project: { ageHours: 0, engagementScore: 0, timePenalty: 0 } });
+
+    const data = await Post.aggregate(pipeline);
 
     let nextCursor = null;
     if (data.length === limit) {
       const last = data[data.length - 1];
-      nextCursor = `${last.likeCount}_${last._id}`;
+      nextCursor = encodeCursor({ score: last.feedScore, date: last.createdAt, id: String(last._id) });
     }
+
     const hasMore = data.length === limit;
+    data.forEach((d) => delete d.feedScore);
 
     res.json({ data, nextCursor, hasMore });
   } catch (err) {

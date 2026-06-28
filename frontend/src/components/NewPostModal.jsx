@@ -18,6 +18,7 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
   const [captionError, setCaptionError] = useState(null);
 
   const fileRef = useRef();
+  const previewUrlRef = useRef(null);
 
   function handleFile(f) {
     if (!f) return;
@@ -26,15 +27,22 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
       alert(`Video must be under ${MAX_VIDEO_MB} MB`);
       return;
     }
+
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const previewUrl = URL.createObjectURL(f);
+    previewUrlRef.current = previewUrl;
     setFile(f);
     setIsVideo(video);
-    setPreview(URL.createObjectURL(f));
-
+    setPreview(previewUrl);
     setCaptionError(null);
   }
 
   function clearFile(e) {
     e.stopPropagation();
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
     setFile(null);
     setPreview(null);
     setIsVideo(false);

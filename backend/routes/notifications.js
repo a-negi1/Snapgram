@@ -1,5 +1,7 @@
-﻿const express = require("express");
+const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
+const { Types: { ObjectId } } = mongoose;
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
 
@@ -18,7 +20,7 @@ router.get("/", authenticate, async (req, res) => {
     const cursor = req.query.cursor || null;
 
     const query = { toUid: req.user.uid };
-    if (cursor) query._id = { $lt: cursor };
+    if (cursor) query._id = { $lt: new ObjectId(cursor) };
 
     const notifs = await Notification.find(query)
       .sort({ createdAt: -1 })

@@ -1,5 +1,7 @@
-﻿const express = require("express");
+const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
+const { Types: { ObjectId } } = mongoose;
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
@@ -76,8 +78,11 @@ router.put("/me", authenticate, async (req, res) => {
     const updates = {};
     if (displayName !== undefined) updates.displayName = displayName.trim();
     if (bio !== undefined) updates.bio = bio.trim();
-    if (username !== undefined)
-      updates.username = username.trim().toLowerCase().replace(/\s+/g, "_");
+    if (username !== undefined) {
+      const cleaned = username.trim().toLowerCase().replace(/\s+/g, "_");
+      if (!cleaned) return res.status(400).json({ error: "Username cannot be empty" });
+      updates.username = cleaned;
+    }
     if (photoURL !== undefined) updates.photoURL = photoURL;
 
     const user = await User.findOneAndUpdate(
@@ -88,6 +93,9 @@ router.put("/me", authenticate, async (req, res) => {
     if (!user) return res.status(404).json({ error: "User not found" });
     res.json(user);
   } catch (err) {
+    if (err.code === 11000 && err.keyValue?.username) {
+      return res.status(409).json({ error: "That username is already taken. Please choose another." });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -99,7 +107,7 @@ router.get("/suggestions", authenticate, async (req, res) => {
     const cursor = req.query.cursor || null;
 
     const query = { uid: { $nin: exclude } };
-    if (cursor) query._id = { $gt: cursor };
+    if (cursor) query._id = { $gt: new ObjectId(cursor) };
 
     const data = await User.find(query).limit(10);
 
@@ -181,7 +189,7 @@ router.get("/:uid/followers", authenticate, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
 
     const query = { uid: { $in: target.followers } };
-    if (cursor) query._id = { $gt: cursor };
+    if (cursor) query._id = { $gt: new ObjectId(cursor) };
 
     const data = await User.find(query).limit(limit);
 
@@ -203,7 +211,7 @@ router.get("/:uid/following", authenticate, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
 
     const query = { uid: { $in: target.following } };
-    if (cursor) query._id = { $gt: cursor };
+    if (cursor) query._id = { $gt: new ObjectId(cursor) };
 
     const data = await User.find(query).limit(limit);
 

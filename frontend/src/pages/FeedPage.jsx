@@ -42,6 +42,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
 
   const feedFetchFn = useCallback(
     (cursor) =>
+
       apiFetch(`/api/posts/feed?limit=12${cursor ? `&cursor=${cursor}` : ""}`),
 
     [currentUserProfile?.uid]
@@ -60,11 +61,20 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
 
 
   const [extraPosts, setExtraPosts] = useState([]);
+  const [deletedPostIds, setDeletedPostIds] = useState(() => new Set());
 
-  const allPosts = [...extraPosts, ...posts].reduce((acc, p) => {
-    if (!acc.find((x) => x._id === p._id)) acc.push(p);
-    return acc;
-  }, []);
+  function handlePostDeleted(postId) {
+    const id = String(postId);
+    setDeletedPostIds((prev) => new Set([...prev, id]));
+    setExtraPosts((prev) => prev.filter((p) => String(p._id) !== id));
+  }
+
+  const allPosts = [...extraPosts, ...posts]
+    .reduce((acc, p) => {
+      if (!acc.find((x) => x._id === p._id)) acc.push(p);
+      return acc;
+    }, [])
+    .filter((p) => !deletedPostIds.has(String(p._id)));
 
 
   useEffect(() => {
@@ -75,6 +85,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
 
   useEffect(() => {
     setExtraPosts([]);
+    setDeletedPostIds(new Set());
   }, [currentUserProfile?.uid]);
 
   useEffect(() => {
@@ -92,8 +103,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
       });
 
       s.on("post-deleted", ({ postId }) => {
-        setExtraPosts((prev) => prev.filter((p) => p._id !== postId));
-
+        handlePostDeleted(postId);
       });
 
       s.on("post-updated", ({ postId, likeCount, likes }) => {
@@ -281,6 +291,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
               currentUser={currentUser}
               currentUserProfile={currentUserProfile}
               onProfileClick={onProfileClick}
+              onPostDeleted={handlePostDeleted}
             />
           ))}
 

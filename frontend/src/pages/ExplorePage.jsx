@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { apiFetch } from "../api";
 import Avatar from "../components/Avatar.jsx";
 import PostCard from "../components/PostCard.jsx";
@@ -17,7 +17,7 @@ export default function ExplorePage({ currentUser, currentUserProfile, onProfile
 
 const exploreFetchFn = useCallback(
     (cursor) =>
-      apiFetch(`/api/posts/explore?limit=12${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+      apiFetch(`/api/posts/explore?limit=12${cursor ? `&cursor=${cursor}` : ""}`),
     []
   );
 
@@ -29,6 +29,7 @@ const exploreFetchFn = useCallback(
     error: exploreError,
     loadMore,
     sentinelRef,
+    reset: resetExplore,
   } = useCursorPagination(exploreFetchFn);
 
   async function searchUsers(val) {
@@ -157,6 +158,7 @@ const exploreFetchFn = useCallback(
               currentUser={currentUser}
               currentUserProfile={currentUserProfile}
               onProfileClick={(uid) => { setLightboxPost(null); onProfileClick(uid); }}
+              onPostDeleted={() => { setLightboxPost(null); resetExplore(); }}
             />
           </div>
         </div>

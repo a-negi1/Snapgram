@@ -1,26 +1,30 @@
-﻿const mongoose = require("mongoose");
+const mongoose = require("mongoose");
 
 const postSchema = new mongoose.Schema(
   {
     uid: { type: String, required: true, index: true },
     username: { type: String, required: true },
     photoURL: { type: String, default: "" },
-    imageURL: { type: String, default: "" },   
+    imageURL: { type: String, default: "" },
 
     mediaType: { type: String, enum: ["image", "video"], default: "image" },
     caption: { type: String, default: "" },
-    likes: { type: [String], default: [] },     
+    likes: { type: [String], default: [] },
 
     likeCount: { type: Number, default: 0 },
-    savedBy: { type: [String], default: [] },   
+    savedBy: { type: [String], default: [] },
 
     commentCount: { type: Number, default: 0 },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
-postSchema.index({ uid: 1, createdAt: -1 });
+postSchema.virtual("saveCount").get(function () {
+  return this.savedBy ? this.savedBy.length : 0;
+});
 
+postSchema.index({ uid: 1, createdAt: -1 });
 postSchema.index({ likeCount: -1 });
+postSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Post", postSchema);

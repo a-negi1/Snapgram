@@ -1,5 +1,7 @@
-﻿const express = require("express");
+const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
+const { Types: { ObjectId } } = mongoose;
 const Comment = require("../models/Comment");
 const Post = require("../models/Post");
 const Reel = require("../models/Reel");
@@ -22,7 +24,7 @@ router.get("/:postId", authenticate, async (req, res) => {
 
     const query = { postId: req.params.postId };
     if (cursor) {
-      query._id = { $lt: cursor };
+      query._id = { $lt: new ObjectId(cursor) };
     }
 
     const data = await Comment.find(query)
