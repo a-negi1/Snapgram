@@ -1,4 +1,4 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 const http = require("http");
 const express = require("express");
 const cors = require("cors");
@@ -45,7 +45,7 @@ socket.join(socket.uid);
 app.io = io;
 
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
 app.get("/", (req, res) => res.json({ status: "Snapgram API running ⚡" }));

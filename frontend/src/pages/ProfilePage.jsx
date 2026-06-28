@@ -3,6 +3,7 @@ import { apiFetch } from "../api";
 import { uploadToCloudinary } from "../utils";
 import Avatar from "../components/Avatar.jsx";
 import PostCard from "../components/PostCard.jsx";
+import NewReelModal from "../components/NewReelModal.jsx";
 import { useCursorPagination } from "../hooks/useCursorPagination.js";
 
 function SkeletonGridItem() {
@@ -64,6 +65,26 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
     sentinelRef: savedSentinelRef,
   } = useCursorPagination(savedFetchFn);
 
+  const reelsFetchFn = useCallback(
+    (cursor) =>
+      apiFetch(`/api/reels/user/${profileUid}?limit=12${cursor ? `&cursor=${cursor}` : ""}`),
+    [profileUid]
+  );
+
+  const {
+    items: reels,
+    loading: reelsLoading,
+    loadingMore: reelsLoadingMore,
+    hasMore: reelsHasMore,
+    error: reelsError,
+    loadMore: reelsLoadMore,
+    reset: resetReels,
+    sentinelRef: reelsSentinelRef,
+  } = useCursorPagination(reelsFetchFn);
+
+  const [showNewReelModal, setShowNewReelModal] = useState(false);
+  const [deletingReelId, setDeletingReelId] = useState(null);
+
   useEffect(() => {
     setActiveTab("posts");
     setProfile(null);
@@ -72,6 +93,7 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
 
   useEffect(() => {
     if (activeTab === "saved" && savedPosts.length === 0) resetSaved();
+    if (activeTab === "reels" && reels.length === 0) resetReels();
   }, [activeTab]);
 
   useEffect(() => {
@@ -180,6 +202,18 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
   const displayLoadMore = activeTab === "saved" ? savedLoadMore : postsLoadMore;
   const displaySentinelRef = activeTab === "saved" ? savedSentinelRef : postsSentinelRef;
 
+  async function handleDeleteReel(reelId) {
+    if (!window.confirm("Delete this reel?")) return;
+    setDeletingReelId(reelId);
+    try {
+      await apiFetch(`/api/reels/${reelId}`, { method: "DELETE" });
+      resetReels();
+    } catch (e) {
+      alert("Failed to delete reel.");
+    }
+    setDeletingReelId(null);
+  }
+
   if (loading) return <div className="loading-spinner">Loading profile…</div>;
   if (!profile) return <div className="empty-state"><h3>User not found</h3></div>;
 
@@ -228,6 +262,9 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
           <button className={`profile-tab ${activeTab === "posts" ? "active" : ""}`} onClick={() => setActiveTab("posts")}>
             <GridIcon /> Posts
           </button>
+          <button className={`profile-tab ${activeTab === "reels" ? "active" : ""}`} onClick={() => setActiveTab("reels")}>
+            <ReelTabIcon /> Reels
+          </button>
           {isOwn && (
             <button className={`profile-tab ${activeTab === "saved" ? "active" : ""}`} onClick={() => setActiveTab("saved")}>
               <BookmarkTabIcon /> Saved
@@ -235,7 +272,77 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
           )}
         </div>
 
-        {displayLoading ? (
+        {activeTab === "reels" ? (
+          <>
+            {isOwn && (
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                <button
+                  className="profile-edit-btn new-reel-btn"
+                  onClick={() => setShowNewReelModal(true)}
+                >
+                  <ReelTabIcon /> New Reel
+                </button>
+              </div>
+            )}
+            {reelsLoading ? (
+              <div className="loading-spinner">Loading…</div>
+            ) : reels.length === 0 && !reelsHasMore ? (
+              <div className="empty-state">
+                <h3>No reels yet</h3>
+                {isOwn && <p>Share your first reel!</p>}
+              </div>
+            ) : (
+              <>
+                <div className="profile-grid">
+                  {reels.map((r) => (
+                    <div key={r._id} className="profile-grid-item" style={{ position: "relative" }}>
+                      <video
+                        src={r.videoURL}
+                        preload="metadata"
+                        muted
+                        playsInline
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
+                      />
+
+                      <div style={{ position: "absolute", top: 6, right: 8, background: "rgba(0,0,0,0.55)", borderRadius: 4, padding: "2px 5px", display: "flex", alignItems: "center", gap: 3 }}>
+                        <svg viewBox="0 0 10 10" fill="white" width="10" height="10"><polygon points="2,1 9,5 2,9" /></svg>
+                      </div>
+
+                      <div className="grid-overlay">
+                        <span>❤️ {r.likeCount || 0}</span>
+                      </div>
+
+                      {isOwn && (
+                        <button
+                          className="reel-delete-btn"
+                          onClick={() => handleDeleteReel(r._id)}
+                          disabled={deletingReelId === r._id}
+                          title="Delete reel"
+                        >
+                          {deletingReelId === r._id ? "…" : "🗑"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {reelsLoadingMore && (
+                    <>
+                      <SkeletonGridItem />
+                      <SkeletonGridItem />
+                      <SkeletonGridItem />
+                    </>
+                  )}
+                </div>
+                {reelsHasMore && <div ref={reelsSentinelRef} style={{ height: 1 }} />}
+                {reelsError && !reelsLoadingMore && (
+                  <div className="load-more-retry">
+                    <span>Failed to load.</span>
+                    <button onClick={reelsLoadMore}>Tap to retry</button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        ) : displayLoading ? (
           <div className="loading-spinner">Loading…</div>
         ) : displayPosts.length === 0 && !displayHasMore ? (
           <div className="empty-state">
@@ -317,6 +424,15 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
         </div>
       )}
 
+      {showNewReelModal && (
+        <NewReelModal
+          currentUser={currentUser}
+          currentUserProfile={currentUserProfile}
+          onClose={() => setShowNewReelModal(false)}
+          onPosted={() => { setShowNewReelModal(false); resetReels(); setActiveTab("reels"); }}
+        />
+      )}
+
       {showEditModal && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
           <div className="new-post-modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
@@ -385,4 +501,7 @@ function GridIcon() {
 }
 function BookmarkTabIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" /></svg>;
+}
+function ReelTabIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="2" y1="7" x2="7" y2="7" /><line x1="2" y1="17" x2="7" y2="17" /><line x1="17" y1="17" x2="22" y2="17" /><line x1="17" y1="7" x2="22" y2="7" /></svg>;
 }

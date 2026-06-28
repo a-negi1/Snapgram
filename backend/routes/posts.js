@@ -1,15 +1,60 @@
-﻿const express = require("express");
+const express = require("express");
 const router = express.Router();
 const Post = require("../models/Post");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
+const Groq = require("groq-sdk");
+
+
+router.post("/generate-caption", authenticate, async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: "imageBase64 is required" });
+    }
+
+    if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === "your_groq_api_key_here") {
+      return res.status(500).json({ error: "GROQ_API_KEY is not configured on the server." });
+    }
+
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+    const completion = await groq.chat.completions.create({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Act as an expert social media manager. Analyze this image and write an engaging, catchy Instagram-style caption with relevant emojis and 3-5 popular hashtags. Return only the caption text, nothing else.",
+            },
+            {
+              type: "image_url",
+              image_url: { url: imageBase64 },
+            },
+          ],
+        },
+      ],
+      max_tokens: 300,
+      temperature: 0.85,
+    });
+
+    const caption = completion.choices[0]?.message?.content?.trim() || "";
+    res.json({ caption });
+  } catch (err) {
+    console.error("Groq caption error:", err?.message || err);
+    const status = err?.status === 401 ? 401 : 502;
+    res.status(status).json({ error: "Caption generation failed: " + (err?.message || "Unknown error") });
+  }
+});
 
 function getThumbURL(post) {
   if (!post.imageURL) return null;
   if (post.mediaType !== "video") return post.imageURL;
 
-return post.imageURL
+  return post.imageURL
     .replace("/video/upload/", "/video/upload/so_0,f_jpg/")
     .replace(/\.(mp4|webm|mov|avi|mkv)(\?.*)?$/i, ".jpg");
 }
@@ -135,13 +180,13 @@ router.post("/", authenticate, async (req, res) => {
       caption: caption?.trim() || "",
     });
 
-const me = await User.findOne({ uid: req.user.uid });
+    const me = await User.findOne({ uid: req.user.uid });
     const followers = me?.followers || [];
     followers.forEach((followerUid) => {
       req.app.io.to(followerUid).emit("new-post", post);
     });
 
-req.app.io.to(req.user.uid).emit("new-post", post);
+    req.app.io.to(req.user.uid).emit("new-post", post);
 
     res.status(201).json(post);
   } catch (err) {
@@ -156,7 +201,7 @@ router.delete("/:id", authenticate, async (req, res) => {
     if (post.uid !== req.user.uid) return res.status(403).json({ error: "Forbidden" });
     await post.deleteOne();
 
-req.app.io.emit("post-deleted", { postId: req.params.id });
+    req.app.io.emit("post-deleted", { postId: req.params.id });
 
     res.json({ success: true });
   } catch (err) {
@@ -175,7 +220,7 @@ router.post("/:id/like", authenticate, async (req, res) => {
     if (alreadyLiked) {
       post.likes.pull(uid);
       post.likeCount = Math.max(0, post.likeCount - 1);
-      
+
       if (post.uid !== uid) {
         await Notification.deleteMany({
           toUid: post.uid,
@@ -190,7 +235,7 @@ router.post("/:id/like", authenticate, async (req, res) => {
       if (post.uid !== uid) {
         const me = await User.findOne({ uid });
         const notifFilter = { toUid: post.uid, fromUid: uid, type: "like", postId: post._id };
-        
+
         await Notification.deleteMany(notifFilter);
         const notif = await Notification.create({
           toUid: post.uid,
@@ -207,7 +252,7 @@ router.post("/:id/like", authenticate, async (req, res) => {
     }
     await post.save();
 
-req.app.io.emit("post-updated", {
+    req.app.io.emit("post-updated", {
       postId: post._id.toString(),
       likeCount: post.likeCount,
       likes: post.likes,

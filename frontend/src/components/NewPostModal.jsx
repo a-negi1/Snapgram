@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { apiFetch } from "../api";
 import { uploadToCloudinary } from "../utils";
 
@@ -11,8 +11,12 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
   const [isVideo, setIsVideo] = useState(false);
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(false);
-  
   const [uploadProgress, setUploadProgress] = useState(null);
+
+
+  const [captionLoading, setCaptionLoading] = useState(false);
+  const [captionError, setCaptionError] = useState(null);
+
   const fileRef = useRef();
 
   function handleFile(f) {
@@ -25,6 +29,8 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
     setFile(f);
     setIsVideo(video);
     setPreview(URL.createObjectURL(f));
+
+    setCaptionError(null);
   }
 
   function clearFile(e) {
@@ -32,7 +38,66 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
     setFile(null);
     setPreview(null);
     setIsVideo(false);
+    setCaptionError(null);
     fileRef.current.value = "";
+  }
+
+
+  function extractImageBase64(f) {
+    return new Promise((resolve, reject) => {
+      if (f.type.startsWith("image/")) {
+
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Failed to read image file"));
+        reader.readAsDataURL(f);
+      } else {
+
+        const video = document.createElement("video");
+        video.muted = true;
+        video.crossOrigin = "anonymous";
+        const objectUrl = URL.createObjectURL(f);
+        video.src = objectUrl;
+
+        video.addEventListener("loadeddata", () => {
+          video.currentTime = 0;
+        });
+
+        video.addEventListener("seeked", () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth || 640;
+          canvas.height = video.videoHeight || 360;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(objectUrl);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        });
+
+        video.addEventListener("error", () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("Failed to load video for frame extraction"));
+        });
+      }
+    });
+  }
+
+
+  async function generateCaption() {
+    if (!file) return;
+    setCaptionLoading(true);
+    setCaptionError(null);
+    try {
+      const imageBase64 = await extractImageBase64(file);
+      const data = await apiFetch("/api/posts/generate-caption", {
+        method: "POST",
+        body: JSON.stringify({ imageBase64 }),
+      });
+      setCaption(data.caption || "");
+    } catch (e) {
+      setCaptionError("✗ Caption generation failed: " + e.message);
+    } finally {
+      setCaptionLoading(false);
+    }
   }
 
   async function submit() {
@@ -66,8 +131,8 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
     uploadProgress === "saving"
       ? "Saving post…"
       : typeof uploadProgress === "number"
-      ? `Uploading… ${uploadProgress}%`
-      : "Sharing…";
+        ? `Uploading… ${uploadProgress}%`
+        : "Sharing…";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -101,7 +166,7 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
             ) : (
               <>
                 <div style={{ fontSize: 40, marginBottom: 10 }}>🖼️🎬</div>
-                <div style={{ fontWeight: 700, marginBottom: 6 }}>Drag & drop or click to upload</div>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Drag &amp; drop or click to upload</div>
                 <div style={{ fontSize: 13, color: "var(--dark-gray)", marginBottom: 4 }}>
                   Images: JPG, PNG, GIF, WebP
                 </div>
@@ -112,7 +177,7 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
             )}
           </div>
 
-          {}
+          { }
           <input
             ref={fileRef}
             type="file"
@@ -125,6 +190,22 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
             <button className="upload-change-btn" onClick={() => fileRef.current.click()} style={{ marginTop: 8 }}>
               Change {isVideo ? "video" : "photo"}
             </button>
+          )}
+
+
+          {preview && (
+            <button
+              id="generate-caption-btn"
+              className="generate-caption-btn"
+              onClick={generateCaption}
+              disabled={captionLoading || loading}
+            >
+              {captionLoading ? "✨ Analyzing media…" : "✨ Generate Caption using AI"}
+            </button>
+          )}
+
+          {captionError && (
+            <div className="caption-error-toast">{captionError}</div>
           )}
 
           <textarea
@@ -154,3 +235,4 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
     </div>
   );
 }
+

@@ -1097,6 +1097,59 @@ body {
   }
 }
 
+
+.generate-caption-btn {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Nunito', sans-serif;
+  cursor: pointer;
+  margin-top: 10px;
+  letter-spacing: 0.01em;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 2px 12px rgba(168, 85, 247, 0.3);
+}
+
+.generate-caption-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 18px rgba(168, 85, 247, 0.45);
+}
+
+.generate-caption-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.generate-caption-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+
+.caption-error-toast {
+  margin-top: 8px;
+  padding: 9px 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+body.dark .caption-error-toast {
+  background: #3b0a0a;
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
+
 .profile-page {
   max-width: 935px;
   width: 100%;
@@ -1930,6 +1983,40 @@ body {
   color: var(--black);
 }
 
+.reel-delete-btn {
+  position: absolute;
+  top: 7px;
+  left: 8px;
+  width: 28px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.18s, background 0.15s;
+  backdrop-filter: blur(4px);
+}
+
+.profile-grid-item:hover .reel-delete-btn {
+  opacity: 1;
+}
+
+.reel-delete-btn:hover {
+  background: rgba(237, 73, 86, 0.85);
+}
+
+.reel-delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 
 .profile-edit-btn {
   padding: 6px 20px;
@@ -1946,6 +2033,28 @@ body {
 
 .profile-edit-btn:hover {
   background: var(--light-gray);
+}
+
+.new-reel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #262626;
+  color: #ffffff;
+  border: none !important;
+}
+
+.new-reel-btn:hover {
+  background: #3a3a3a !important;
+}
+
+body.dark .new-reel-btn {
+  background: #ffffff;
+  color: #262626;
+}
+
+body.dark .new-reel-btn:hover {
+  background: #e0e0e0 !important;
 }
 
 .edit-field-label {
