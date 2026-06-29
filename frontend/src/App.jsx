@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 import { apiFetch } from "./api";
@@ -27,6 +27,8 @@ export default function App() {
   const [showNewPost, setShowNewPost] = useState(false);
   const [showNewReel, setShowNewReel] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [toastNotif, setToastNotif] = useState(null);
+  const toastTimer = useRef(null);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function App() {
     }
   }, [darkMode]);
 
-useEffect(() => {
+  useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);
       setAuthLoading(false);
@@ -48,7 +50,7 @@ useEffect(() => {
     return unsub;
   }, []);
 
-useEffect(() => {
+  useEffect(() => {
     if (!authUser) { setCurrentUserProfile(null); return; }
     apiFetch("/api/users/me")
       .then((profile) => {
@@ -57,7 +59,7 @@ useEffect(() => {
       })
       .catch(async () => {
 
-try {
+        try {
           const profile = await apiFetch("/api/users/me", {
             method: "POST",
             body: JSON.stringify({
@@ -69,7 +71,7 @@ try {
             }),
           });
 
-if (profile && profile.uid) setCurrentUserProfile(profile);
+          if (profile && profile.uid) setCurrentUserProfile(profile);
           else setCurrentUserProfile(null);
         } catch (_) {
           setCurrentUserProfile(null);
@@ -77,26 +79,31 @@ if (profile && profile.uid) setCurrentUserProfile(profile);
       });
   }, [authUser]);
 
-useEffect(() => {
+  useEffect(() => {
     if (!authUser) return;
 
-if ("Notification" in window && Notification.permission === "default") {
+    if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
 
     let sock;
 
-apiFetch("/api/notifications/unread-count")
+    apiFetch("/api/notifications/unread-count")
       .then((d) => setUnreadNotifs(d.count || 0))
-      .catch(() => {});
+      .catch(() => { });
 
-getSocket().then((s) => {
+    getSocket().then((s) => {
       sock = s;
       s.on("notification", (notif) => {
 
-setUnreadNotifs((n) => n + 1);
+        setUnreadNotifs((n) => n + 1);
 
-try {
+
+        setToastNotif(notif);
+        clearTimeout(toastTimer.current);
+        toastTimer.current = setTimeout(() => setToastNotif(null), 4500);
+
+        try {
           const ctx = new (window.AudioContext || window.webkitAudioContext)();
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
@@ -109,14 +116,14 @@ try {
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
           osc.start(ctx.currentTime);
           osc.stop(ctx.currentTime + 0.4);
-        } catch (_) {}
+        } catch (_) { }
 
-if ("Notification" in window && Notification.permission === "granted" && document.visibilityState !== "visible") {
+        if ("Notification" in window && Notification.permission === "granted" && document.visibilityState !== "visible") {
           const title = notif.type === "like"
             ? `${notif.fromUsername} liked your post`
             : notif.type === "comment"
-            ? `${notif.fromUsername} commented: "${notif.commentText || ""}"`
-            : `${notif.fromUsername} started following you`;
+              ? `${notif.fromUsername} commented: "${notif.commentText || ""}"`
+              : `${notif.fromUsername} started following you`;
 
           const n = new Notification("Snapgram", {
             body: title,
@@ -160,11 +167,11 @@ if ("Notification" in window && Notification.permission === "granted" && documen
 
   if (!authUser) return <AuthPage onAuth={setAuthUser} onProfileLoaded={setCurrentUserProfile} />;
 
-const isReelsPage = page === "reels";
+  const isReelsPage = page === "reels";
 
   return (
     <div className="app-layout">
-      {}
+      { }
       <nav className="bottom-nav">
         <button className={`nav-item ${page === "home" ? "active" : ""}`} onClick={() => setPage("home")}>
           <HomeIcon filled={page === "home"} />
@@ -187,7 +194,7 @@ const isReelsPage = page === "reels";
         </button>
       </nav>
 
-      {}
+      { }
       <nav className="sidebar">
         <div className="sidebar-logo">Snapgram</div>
         <button className={`nav-item ${page === "home" ? "active" : ""}`} onClick={() => setPage("home")}>
@@ -225,7 +232,7 @@ const isReelsPage = page === "reels";
         </button>
       </nav>
 
-      {}
+      { }
       <div className="mobile-header">
         <div className="mobile-header-logo">Snapgram</div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -271,6 +278,31 @@ const isReelsPage = page === "reels";
           <NotificationsPage currentUser={authUser} onProfileClick={goToProfile} />
         )}
       </div>
+
+
+      {toastNotif && (
+        <div className="notif-toast" onClick={() => { goToNotifications(); setToastNotif(null); }}>
+          <div className="notif-toast-avatar">
+            {toastNotif.fromPhotoURL
+              ? <img src={toastNotif.fromPhotoURL} alt="" />
+              : <span>{(toastNotif.fromUsername || "?")[0].toUpperCase()}</span>
+            }
+          </div>
+          <div className="notif-toast-body">
+            <div className="notif-toast-title">Snapgram</div>
+            <div className="notif-toast-msg">
+              <strong>{toastNotif.fromUsername}</strong>
+              {" "}
+              {toastNotif.type === "like"
+                ? "liked your post"
+                : toastNotif.type === "comment"
+                  ? `commented: "${toastNotif.commentText || ""}"`
+                  : "started following you"}
+            </div>
+          </div>
+          <button className="notif-toast-close" onClick={(e) => { e.stopPropagation(); setToastNotif(null); }}>✕</button>
+        </div>
+      )}
 
       {showNewPost && (
         <NewPostModal
