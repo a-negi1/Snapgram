@@ -109,9 +109,9 @@ router.get("/feed", authenticate, async (req, res) => {
         $addFields: {
           engagementScore: {
             $add: [
-              { $multiply: ["$likeCount",    1] },
+              { $multiply: ["$likeCount", 1] },
               { $multiply: ["$commentCount", 2] },
-              { $multiply: ["$saveCount",    3] },
+              { $multiply: ["$saveCount", 3] },
             ],
           },
         },
@@ -130,7 +130,7 @@ router.get("/feed", authenticate, async (req, res) => {
         $addFields: {
           feedScore: {
             $cond: {
-              if:   { $gt: ["$timePenalty", 0] },
+              if: { $gt: ["$timePenalty", 0] },
               then: { $divide: ["$engagementScore", "$timePenalty"] },
               else: 0,
             },
@@ -163,8 +163,8 @@ router.get("/feed", authenticate, async (req, res) => {
       const last = data[data.length - 1];
       nextCursor = encodeCursor({
         score: last.feedScore,
-        date:  last.createdAt,
-        id:    String(last._id),
+        date: last.createdAt,
+        id: String(last._id),
       });
     }
 
@@ -196,9 +196,9 @@ router.get("/explore", authenticate, async (req, res) => {
         $addFields: {
           engagementScore: {
             $add: [
-              { $multiply: ["$likeCount",    1] },
+              { $multiply: ["$likeCount", 1] },
               { $multiply: ["$commentCount", 2] },
-              { $multiply: ["$saveCount",    3] },
+              { $multiply: ["$saveCount", 3] },
             ],
           },
         },
@@ -217,7 +217,7 @@ router.get("/explore", authenticate, async (req, res) => {
         $addFields: {
           feedScore: {
             $cond: {
-              if:   { $gt: ["$timePenalty", 0] },
+              if: { $gt: ["$timePenalty", 0] },
               then: { $divide: ["$engagementScore", "$timePenalty"] },
               else: 0,
             },
@@ -266,7 +266,8 @@ router.get("/saved", authenticate, async (req, res) => {
     const cursor = req.query.cursor || null;
 
     const query = { savedBy: req.user.uid };
-    if (cursor) query._id = { $lt: cursor };
+
+    if (cursor) query._id = { $lt: new ObjectId(cursor) };
 
     const data = await Post.find(query)
       .sort({ createdAt: -1 })
@@ -287,7 +288,8 @@ router.get("/user/:uid", authenticate, async (req, res) => {
     const cursor = req.query.cursor || null;
 
     const query = { uid: req.params.uid };
-    if (cursor) query._id = { $lt: cursor };
+    
+    if (cursor) query._id = { $lt: new ObjectId(cursor) };
 
     const data = await Post.find(query)
       .sort({ createdAt: -1 })

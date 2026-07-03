@@ -20,7 +20,7 @@ export async function getSocket() {
       auth: { token },
       transports: ["websocket"],
       reconnection: true,
-      reconnectionAttempts: Infinity,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     });
 
@@ -28,25 +28,22 @@ export async function getSocket() {
       try {
         const freshToken = await auth.currentUser?.getIdToken(true);
         if (freshToken) socket.auth = { token: freshToken };
-      } catch (_) {}
+      } catch (_) { }
     });
 
     socket.on("connect", () => console.log("🔌 Socket connected:", socket.id));
     socket.on("disconnect", () => {
       console.log("❌ Socket disconnected");
       connectingPromise = null;
+      socket = null;
     });
     socket.on("connect_error", (err) => console.warn("Socket error:", err.message));
 
     return socket;
   })();
 
-  try {
-    return await connectingPromise;
-  } finally {
 
-    connectingPromise = null;
-  }
+  return connectingPromise;
 }
 
 export function disconnectSocket() {

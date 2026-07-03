@@ -75,6 +75,15 @@ export function useCursorPagination(fetchFn) {
   }, [doFetch]);
 
 
+  const updateItem = useCallback((id, patch) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        String(item._id) === String(id) ? { ...item, ...patch } : item
+      )
+    );
+  }, []);
+
+
   useEffect(() => {
     if (!sentinelEl || !hasMore) return;
 
@@ -98,6 +107,7 @@ export function useCursorPagination(fetchFn) {
     error,
     loadMore,
     reset,
+    updateItem,
     sentinelRef,
   };
 }

@@ -13,6 +13,7 @@ const commentsRouter = require("./routes/comments");
 const storiesRouter = require("./routes/stories");
 const notificationsRouter = require("./routes/notifications");
 const reelsRouter = require("./routes/reels");
+const chatbotRouter = require("./routes/chatbot");
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -37,7 +38,7 @@ io.use(async (socket, next) => {
 
 io.on("connection", (socket) => {
 
-socket.join(socket.uid);
+  socket.join(socket.uid);
   console.log(`🔌 Socket connected: ${socket.uid}`);
   socket.on("disconnect", () => console.log(`❌ Socket disconnected: ${socket.uid}`));
 });
@@ -56,6 +57,7 @@ app.use("/api/comments", commentsRouter);
 app.use("/api/stories", storiesRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/reels", reelsRouter);
+app.use("/api/chatbot", chatbotRouter);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

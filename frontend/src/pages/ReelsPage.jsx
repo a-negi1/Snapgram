@@ -55,14 +55,18 @@ export default function ReelsPage({ currentUser, currentUserProfile, onProfileCl
       s.on("reel-updated", onReelUpdated);
       s.on("reel-deleted", onReelDeleted);
       s.on("reel-comment", onReelComment);
+
+      sock._reelsPageHandlers = { onReelUpdated, onReelDeleted, onReelComment };
     });
 
     return () => {
       mounted = false;
       if (sock) {
-        sock.off("reel-updated");
-        sock.off("reel-deleted");
-        sock.off("reel-comment");
+        const h = sock._reelsPageHandlers || {};
+        sock.off("reel-updated", h.onReelUpdated);
+        sock.off("reel-deleted", h.onReelDeleted);
+        sock.off("reel-comment", h.onReelComment);
+        delete sock._reelsPageHandlers;
       }
     };
   }, [currentUser]);

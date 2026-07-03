@@ -46,7 +46,10 @@ router.get("/", authenticate, async (req, res) => {
       await Notification.deleteMany({ _id: { $in: toDelete } });
     }
 
-    const nextCursor = notifs.length === limit ? notifs[notifs.length - 1]._id : null;
+
+    const nextCursor = unique.length > 0 && notifs.length === limit
+      ? unique[unique.length - 1]._id
+      : null;
     const hasMore = notifs.length === limit;
 
     res.json({ data: unique, nextCursor, hasMore });

@@ -17,6 +17,7 @@ import ExplorePage from "./pages/ExplorePage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
 import ReelsPage from "./pages/ReelsPage.jsx";
+import ChatbotCard from "./components/ChatbotCard.jsx";
 
 export default function App() {
   const [authUser, setAuthUser] = useState(null);
@@ -30,6 +31,15 @@ export default function App() {
   const [toastNotif, setToastNotif] = useState(null);
   const toastTimer = useRef(null);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
+  const [chatbotOpen, setChatbotOpen] = useState(false);
+  const [isMobileScreen, setIsMobileScreen] = useState(() => window.innerWidth <= 768);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const handler = (e) => setIsMobileScreen(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   useEffect(() => {
     if (darkMode) {
@@ -149,6 +159,8 @@ export default function App() {
   function goToNotifications() {
     setPage("notifications");
     setUnreadNotifs(0);
+
+    apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => { });
   }
 
   if (authLoading) return (
@@ -249,6 +261,41 @@ export default function App() {
           </button>
         </div>
       </div>
+
+
+      {!isMobileScreen ? (
+        <div className="chatbot-pill-fixed-wrapper">
+          <button
+            className="chatbot-pill"
+            onClick={() => setChatbotOpen((o) => !o)}
+            aria-label="Open Snap AI chatbot"
+          >
+            <span className="chatbot-pill-icon">✨</span>
+            Ask Snap AI
+          </button>
+          <ChatbotCard
+            open={chatbotOpen}
+            onClose={() => setChatbotOpen(false)}
+            isMobile={false}
+          />
+        </div>
+      ) : (
+        <>
+          <button
+            className="chatbot-fab"
+            onClick={() => setChatbotOpen((o) => !o)}
+            aria-label="Open Snap AI chatbot"
+            title="Ask Snap AI"
+          >
+            ✨
+          </button>
+          <ChatbotCard
+            open={chatbotOpen}
+            onClose={() => setChatbotOpen(false)}
+            isMobile={true}
+          />
+        </>
+      )}
 
       <div className={`main-content ${isReelsPage ? "main-content--reels" : ""}`}>
         {page === "home" && (

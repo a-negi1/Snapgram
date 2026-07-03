@@ -18,6 +18,7 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
   const [heartBurst, setHeartBurst] = useState(null);
   const videoRef = useRef(null);
   const mediaWrapRef = useRef(null);
+  const lastTap = useRef(0);
 
   const [comments, setComments] = useState([]);
   const [commentsOldestId, setCommentsOldestId] = useState(null);
@@ -33,11 +34,23 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
 
   function handleDoubleTap(e) {
     const rect = mediaWrapRef.current?.getBoundingClientRect();
-    const x = e.clientX - (rect?.left || 0);
-    const y = e.clientY - (rect?.top || 0);
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+    const x = clientX - (rect?.left || 0);
+    const y = clientY - (rect?.top || 0);
     setHeartBurst({ x, y, key: Date.now() });
     setTimeout(() => setHeartBurst(null), 750);
     if (!liked) toggleLike();
+  }
+
+  function handleMediaTap(e) {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      handleDoubleTap(e);
+      lastTap.current = 0;
+    } else {
+      lastTap.current = now;
+    }
   }
 
   const isOwner = currentUser?.uid === post.uid;
@@ -226,7 +239,7 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
 
         {post.imageURL ? (
           post.mediaType === "video" ? (
-            <div className="post-video-wrapper" ref={mediaWrapRef} onDoubleClick={handleDoubleTap} style={{ position: "relative" }}>
+            <div className="post-video-wrapper" ref={mediaWrapRef} onClick={handleMediaTap} style={{ position: "relative" }}>
               <video
                 ref={videoRef}
                 src={post.imageURL}
@@ -251,7 +264,7 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
               )}
             </div>
           ) : (
-            <div ref={mediaWrapRef} style={{ position: "relative" }} onDoubleClick={handleDoubleTap}>
+            <div ref={mediaWrapRef} style={{ position: "relative" }} onClick={handleMediaTap}>
               <img
                 src={post.imageURL}
                 alt=""
@@ -265,7 +278,7 @@ export default function PostCard({ post, currentUser, currentUserProfile, onProf
             </div>
           )
         ) : (
-          <div className="post-image-placeholder" ref={mediaWrapRef} style={{ position: "relative" }} onDoubleClick={handleDoubleTap}>
+          <div className="post-image-placeholder" ref={mediaWrapRef} style={{ position: "relative" }} onClick={handleMediaTap}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />

@@ -39,7 +39,7 @@ function buildScoringStages() {
       $addFields: {
         engagementScore: {
           $add: [
-            { $multiply: ["$likeCount",    1] },
+            { $multiply: ["$likeCount", 1] },
             { $multiply: ["$commentCount", 2] },
           ],
         },
@@ -59,7 +59,7 @@ function buildScoringStages() {
       $addFields: {
         feedScore: {
           $cond: {
-            if:   { $gt: ["$timePenalty", 0] },
+            if: { $gt: ["$timePenalty", 0] },
             then: { $divide: ["$engagementScore", "$timePenalty"] },
             else: 0,
           },
@@ -151,7 +151,8 @@ router.get("/user/:uid", authenticate, async (req, res) => {
     const cursor = req.query.cursor || null;
 
     const query = { uid: req.params.uid };
-    if (cursor) query._id = { $lt: cursor };
+
+    if (cursor) query._id = { $lt: new ObjectId(cursor) };
 
     const data = await Reel.find(query)
       .sort({ createdAt: -1 })
@@ -204,9 +205,9 @@ router.post("/:id/like", authenticate, async (req, res) => {
     await reel.save();
 
     req.app.io.emit("reel-updated", {
-      reelId:    reel._id.toString(),
+      reelId: reel._id.toString(),
       likeCount: reel.likeCount,
-      likes:     reel.likes,
+      likes: reel.likes,
     });
 
     res.json({ liked: !alreadyLiked, likeCount: reel.likeCount });

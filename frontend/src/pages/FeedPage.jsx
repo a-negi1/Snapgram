@@ -56,6 +56,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
     error: feedError,
     loadMore,
     reset: resetFeed,
+    updateItem: updatePaginatedPost,
     sentinelRef,
   } = useCursorPagination(feedFetchFn);
 
@@ -95,30 +96,34 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
     getSocket().then((s) => {
       sock = s;
 
-      s.on("new-post", (post) => {
+      function onNewPost(post) {
         setExtraPosts((prev) => {
           if (prev.find((p) => p._id === post._id)) return prev;
           return [post, ...prev];
         });
-      });
+      }
 
-      s.on("post-deleted", ({ postId }) => {
+      function onPostDeleted({ postId }) {
         handlePostDeleted(postId);
-      });
+      }
 
-      s.on("post-updated", ({ postId, likeCount, likes }) => {
+      function onPostUpdated({ postId, likeCount, likes }) {
+        const patch = { likeCount, likes };
         setExtraPosts((prev) =>
-          prev.map((p) => p._id === postId ? { ...p, likeCount, likes } : p)
+          prev.map((p) => p._id === postId ? { ...p, ...patch } : p)
         );
-      });
+        updatePaginatedPost(postId, patch);
+      }
 
-      s.on("new-comment", ({ postId, commentCount }) => {
+      function onNewComment({ postId, commentCount }) {
+        const patch = { commentCount };
         setExtraPosts((prev) =>
-          prev.map((p) => p._id === postId ? { ...p, commentCount } : p)
+          prev.map((p) => p._id === postId ? { ...p, ...patch } : p)
         );
-      });
+        updatePaginatedPost(postId, patch);
+      }
 
-      s.on("new-story", ({ uid, username, photoURL, story }) => {
+      function onNewStory({ uid, username, photoURL, story }) {
         setStories((prev) => {
           const copy = [...prev];
           const idx = copy.findIndex((g) => g.uid === uid);
@@ -131,21 +136,31 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
           }
           return copy;
         });
-      });
+      }
+
+      s.on("new-post", onNewPost);
+      s.on("post-deleted", onPostDeleted);
+      s.on("post-updated", onPostUpdated);
+      s.on("new-comment", onNewComment);
+      s.on("new-story", onNewStory);
+
+      sock._feedHandlers = { onNewPost, onPostDeleted, onPostUpdated, onNewComment, onNewStory };
     });
 
     return () => {
       if (sock) {
-        sock.off("new-post");
-        sock.off("post-deleted");
-        sock.off("post-updated");
-        sock.off("new-comment");
-        sock.off("new-story");
+        const h = sock._feedHandlers || {};
+        sock.off("new-post", h.onNewPost);
+        sock.off("post-deleted", h.onPostDeleted);
+        sock.off("post-updated", h.onPostUpdated);
+        sock.off("new-comment", h.onNewComment);
+        sock.off("new-story", h.onNewStory);
+        delete sock._feedHandlers;
       }
     };
   }, [currentUser]);
 
- 
+
   useEffect(() => {
     if (!viewingGroup) return;
     setStoryProgress(0);
@@ -185,7 +200,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
     });
   }
 
-  
+
   function onBarMouseDown(e) {
     const bar = storiesBarRef.current;
     dragRef.current = { active: true, startX: e.pageX - bar.offsetLeft, scrollLeft: bar.scrollLeft, moved: false };
@@ -233,7 +248,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
 
   return (
     <div className="feed">
-      {/* Stories bar */}
+
       <div className="stories-wrapper">
         <div
           className="stories-bar"
@@ -274,7 +289,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
         </div>
       </div>
 
-      
+
       {loading ? (
         <div className="loading-spinner">Loading…</div>
       ) : allPosts.length === 0 && !hasMore ? (
@@ -295,7 +310,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
             />
           ))}
 
-          
+
           {hasMore && (
             <div ref={sentinelRef} style={{ height: 1 }} />
           )}
