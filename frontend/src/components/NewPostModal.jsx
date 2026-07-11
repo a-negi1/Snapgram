@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { apiFetch } from "../api";
 import { uploadToCloudinary } from "../utils";
+import { toast } from "../hooks/useToast";
 
 const ACCEPTED = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,video/x-msvideo";
 const MAX_VIDEO_MB = 100;
@@ -116,6 +117,39 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
       const { url, mediaType } = await uploadToCloudinary(file, (pct) => {
         setUploadProgress(pct);
       });
+
+
+      setUploadProgress("checking");
+      const toastId = toast.loading("Checking image for policy violations…");
+
+      try {
+        const modResult = await apiFetch("/api/posts/moderate-image", {
+          method: "POST",
+          body: JSON.stringify({ imageURL: url }),
+        });
+
+        if (!modResult.safe) {
+
+          const reasonStr = (modResult.reasons || []).join(", ") || "policy violation";
+          toast.error(toastId, `Image blocked — flagged for ${reasonStr}.`);
+          setLoading(false);
+          setUploadProgress(null);
+          return;
+        }
+
+        toast.success(toastId, "✓ Image looks good!");
+      } catch (modErr) {
+
+        if (modErr?.status === 422) {
+          const reasonStr = (modErr.data?.reasons || []).join(", ") || "policy violation";
+          toast.error(toastId, `Image blocked — flagged for ${reasonStr}.`);
+          setLoading(false);
+          setUploadProgress(null);
+          return;
+        }
+        toast.dismiss(toastId);
+      }
+
       setUploadProgress("saving");
       await apiFetch("/api/posts", {
         method: "POST",
@@ -138,9 +172,11 @@ export default function NewPostModal({ currentUser, currentUserProfile, onClose,
   const progressLabel =
     uploadProgress === "saving"
       ? "Saving post…"
-      : typeof uploadProgress === "number"
-        ? `Uploading… ${uploadProgress}%`
-        : "Sharing…";
+      : uploadProgress === "checking"
+        ? "Checking image…"
+        : typeof uploadProgress === "number"
+          ? `Uploading… ${uploadProgress}%`
+          : "Sharing…";
 
   return (
     <div className="modal-overlay" onClick={onClose}>

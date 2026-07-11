@@ -23,7 +23,7 @@ function SkeletonCard() {
   );
 }
 
-export default function FeedPage({ currentUser, currentUserProfile, onProfileClick }) {
+export default function FeedPage({ currentUser, currentUserProfile, onProfileClick, onActivePostChange }) {
   const [stories, setStories] = useState([]);
   const [uploadingStory, setUploadingStory] = useState(false);
   const [viewingGroup, setViewingGroup] = useState(null);
@@ -60,6 +60,29 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
     sentinelRef,
   } = useCursorPagination(feedFetchFn);
 
+  
+  
+  const ratioMapRef = useRef({});
+  const allPostsRef = useRef([]);
+
+  
+  const onVisibleCallback = useCallback((postId, ratio) => {
+    ratioMapRef.current[postId] = ratio;
+
+    
+    let bestId = null;
+    let bestRatio = 0;
+    for (const [id, r] of Object.entries(ratioMapRef.current)) {
+      if (r > bestRatio) { bestRatio = r; bestId = id; }
+    }
+
+    const activePost = bestId && bestRatio > 0.1
+      ? allPostsRef.current.find((p) => String(p._id) === bestId)
+      : null;
+
+    if (onActivePostChange) onActivePostChange(activePost || null);
+  }, [onActivePostChange]);
+
 
   const [extraPosts, setExtraPosts] = useState([]);
   const [deletedPostIds, setDeletedPostIds] = useState(() => new Set());
@@ -76,6 +99,9 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
       return acc;
     }, [])
     .filter((p) => !deletedPostIds.has(String(p._id)));
+
+  
+  allPostsRef.current = allPosts;
 
 
   useEffect(() => {
@@ -307,6 +333,7 @@ export default function FeedPage({ currentUser, currentUserProfile, onProfileCli
               currentUserProfile={currentUserProfile}
               onProfileClick={onProfileClick}
               onPostDeleted={handlePostDeleted}
+              onVisible={onVisibleCallback}
             />
           ))}
 

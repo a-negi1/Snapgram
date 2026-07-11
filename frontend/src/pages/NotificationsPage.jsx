@@ -6,11 +6,11 @@ import { timeAgo } from "../utils";
 import { useCursorPagination } from "../hooks/useCursorPagination.js";
 
 export default function NotificationsPage({ currentUser, onProfileClick }) {
-  
+
   const notifFetchFn = useCallback(
     (cursor) =>
       apiFetch(`/api/notifications?limit=20${cursor ? `&cursor=${cursor}` : ""}`),
-    
+
     [currentUser?.uid]
   );
 
@@ -27,7 +27,7 @@ export default function NotificationsPage({ currentUser, onProfileClick }) {
 
   useEffect(() => {
     if (!currentUser) return;
-    apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => {});
+    apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => { });
   }, [currentUser?.uid]);
 
   useEffect(() => {
@@ -37,8 +37,8 @@ export default function NotificationsPage({ currentUser, onProfileClick }) {
       sock = s;
       s.on("notification", (notif) => {
 
-reset();
-        apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => {});
+        reset();
+        apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => { });
       });
     });
 
@@ -95,17 +95,17 @@ reset();
             ))}
           </div>
 
-          {/* Sentinel */}
+
           {hasMore && (
             <div ref={sentinelRef} style={{ height: 1 }} />
           )}
 
-          {/* Loading more indicator */}
+
           {loadingMore && (
             <div className="loading-spinner" style={{ padding: "12px 0", fontSize: 13 }}>Loading more…</div>
           )}
 
-          {/* Error + retry */}
+
           {error && !loadingMore && (
             <div className="load-more-retry">
               <span>Failed to load.</span>

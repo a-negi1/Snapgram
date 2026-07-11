@@ -2,11 +2,99 @@ const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 const { Types: { ObjectId } } = mongoose;
+const https = require("https");
+const crypto = require("crypto");
 const Post = require("../models/Post");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
 const Groq = require("groq-sdk");
+
+
+const GUARD_CATEGORIES = {
+  S1:  "violent crimes",
+  S2:  "non-violent crimes",
+  S3:  "sex crimes",
+  S4:  "child exploitation",
+  S5:  "defamation",
+  S6:  "specialized advice",
+  S7:  "privacy violations",
+  S8:  "intellectual property",
+  S9:  "weapons",
+  S10: "hate speech",
+  S11: "self-harm",
+  S12: "sexual content",
+  S13: "election interference",
+};
+
+function translateReasons(codeString) {
+  if (!codeString) return [];
+  return codeString
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .map((c) => GUARD_CATEGORIES[c] || c);
+}
+
+
+function cloudinaryDelete(publicId) {
+  return new Promise((resolve, reject) => {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey    = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      console.warn("[moderate-image] Cloudinary creds missing — skipping delete of blocked image.");
+      return resolve(false);
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const toSign    = `public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
+    const signature = crypto.createHash("sha1").update(toSign).digest("hex");
+
+    const body = JSON.stringify({ public_id: publicId, timestamp, api_key: apiKey, signature });
+
+    const options = {
+      hostname: "api.cloudinary.com",
+      path: `/v1_1/${cloudName}/image/destroy`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve(parsed.result === "ok");
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+    req.on("error", (err) => {
+      console.error("[cloudinaryDelete] error:", err.message);
+      resolve(false);
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
+
+function extractPublicId(imageURL) {
+  
+  try {
+    const match = imageURL.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[a-z]+)?$/i);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
 
 
 router.post("/generate-caption", authenticate, async (req, res) => {
@@ -49,6 +137,121 @@ router.post("/generate-caption", authenticate, async (req, res) => {
     console.error("Groq caption error:", err?.message || err);
     const status = err?.status === 401 ? 401 : 502;
     res.status(status).json({ error: "Caption generation failed: " + (err?.message || "Unknown error") });
+  }
+});
+
+
+
+
+
+
+
+
+router.post("/moderate-image", authenticate, async (req, res) => {
+  const { imageURL } = req.body;
+  if (!imageURL) return res.status(400).json({ error: "imageURL is required" });
+
+  if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === "your_groq_api_key_here") {
+    
+    return res.json({ safe: true });
+  }
+
+  try {
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+    
+    const descResult = await groq.chat.completions.create({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: imageURL } },
+          {
+            type: "text",
+            text: "Describe this image in detail for content moderation. Include all people, objects, actions, weapons, nudity, violence, or sensitive content visible. Be specific and factual.",
+          },
+        ],
+      }],
+      max_tokens: 400,
+      temperature: 0,
+    });
+
+    const description = descResult.choices[0]?.message?.content?.trim() || "";
+    console.log("[moderate-image] vision description:", description);
+
+    if (!description) {
+      console.warn("[moderate-image] Empty description — blocking to be safe.");
+      return res.status(422).json({
+        safe: false,
+        reasons: ["image could not be analysed"],
+        error: "Image could not be analysed. Please try a different image.",
+      });
+    }
+
+    
+    
+    
+    const SYSTEM_PROMPT =
+      "You are a strict content moderator for a social media platform.\n" +
+      "Read the image description and decide if it is safe to post.\n\n" +
+      "BLOCK (respond 'unsafe') if the description mentions ANY of:\n" +
+      "- A firearm, rifle, handgun, shotgun, assault rifle, gun, or any weapon being held, aimed, or displayed\n" +
+      "- Violence, blood, gore, or graphic bodily harm\n" +
+      "- Nudity or sexually explicit content\n" +
+      "- Sexual content involving minors\n" +
+      "- Hate symbols or hate speech\n" +
+      "- Self-harm or suicide depictions\n\n" +
+      "CRITICAL RULE: Block ALL firearms with no exceptions — stock photos, cosplay, game props, " +
+      "photoshoots, toys that look like real guns. Context does NOT matter. If it looks like a gun, block it.\n\n" +
+      "Respond with EXACTLY:\n" +
+      "safe\n" +
+      "  OR\n" +
+      "unsafe\n" +
+      "<one short plain-English reason, e.g. 'assault rifle visible'>";
+
+    const modResult = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user",   content: "Image description:\n" + description },
+      ],
+      max_tokens: 60,
+      temperature: 0,
+    });
+
+    const rawVerdict  = modResult.choices[0]?.message?.content?.trim() || "";
+    console.log("[moderate-image] classification verdict:", rawVerdict);
+
+    const verdictLines = rawVerdict.split("\n").map((l) => l.trim());
+    const isSafe = verdictLines[0]?.toLowerCase() === "safe";
+
+    if (isSafe) {
+      return res.json({ safe: true });
+    }
+
+    
+    const reason = verdictLines[1] || "policy violation";
+    console.warn("[moderate-image] BLOCKED —", reason);
+
+    const publicId = extractPublicId(imageURL);
+    if (publicId) {
+      await cloudinaryDelete(publicId);
+    }
+
+    return res.status(422).json({
+      safe: false,
+      reasons: [reason],
+      error: `Image blocked — ${reason}.`,
+    });
+
+  } catch (err) {
+    console.error("[moderate-image] error:", err?.message || err);
+    
+    return res.status(422).json({
+      safe: false,
+      reasons: ["moderation check failed"],
+      error: "Image could not be verified. Please try again or use a different image.",
+    });
   }
 });
 

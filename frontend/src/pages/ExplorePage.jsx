@@ -9,7 +9,7 @@ function SkeletonGridItem() {
   return <div className="skeleton-grid-item" />;
 }
 
-export default function ExplorePage({ currentUser, currentUserProfile, onProfileClick }) {
+export default function ExplorePage({ currentUser, currentUserProfile, onProfileClick, onActivePostChange }) {
   const [searchVal, setSearchVal] = useState("");
   const [users, setUsers] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -91,7 +91,7 @@ const exploreFetchFn = useCallback(
             <>
               <div className="explore-grid">
                 {posts.map((p) => (
-                  <div key={p._id} className="profile-grid-item" onClick={() => setLightboxPost(p)}>
+                  <div key={p._id} className="profile-grid-item" onClick={() => { setLightboxPost(p); onActivePostChange?.(p); }}>
                     {p.imageURL ? (
                       p.mediaType === "video" ? (
                         <>
@@ -151,14 +151,14 @@ const exploreFetchFn = useCallback(
 
       {}
       {lightboxPost && (
-        <div className="modal-overlay" onClick={() => setLightboxPost(null)}>
+        <div className="modal-overlay" onClick={() => { setLightboxPost(null); onActivePostChange?.(null); }}>
           <div className="lightbox-card" onClick={(e) => e.stopPropagation()}>
             <PostCard
               post={lightboxPost}
               currentUser={currentUser}
               currentUserProfile={currentUserProfile}
-              onProfileClick={(uid) => { setLightboxPost(null); onProfileClick(uid); }}
-              onPostDeleted={() => { setLightboxPost(null); resetExplore(); }}
+              onProfileClick={(uid) => { setLightboxPost(null); onActivePostChange?.(null); onProfileClick(uid); }}
+              onPostDeleted={() => { setLightboxPost(null); onActivePostChange?.(null); resetExplore(); }}
             />
           </div>
         </div>

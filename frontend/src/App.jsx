@@ -10,6 +10,7 @@ import Avatar from "./components/Avatar.jsx";
 import NewPostModal from "./components/NewPostModal.jsx";
 import NewReelModal from "./components/NewReelModal.jsx";
 import RightPanel from "./components/RightPanel.jsx";
+import { ToastPortal } from "./hooks/useToast";
 
 import AuthPage from "./pages/AuthPage.jsx";
 import FeedPage from "./pages/FeedPage.jsx";
@@ -33,6 +34,8 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
   const [chatbotOpen, setChatbotOpen] = useState(false);
   const [isMobileScreen, setIsMobileScreen] = useState(() => window.innerWidth <= 768);
+  const [activePost, setActivePost] = useState(null);
+  const [viewingProfile, setViewingProfile] = useState(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
@@ -151,13 +154,40 @@ export default function App() {
     };
   }, [authUser]);
 
-  function goToProfile(uid) {
+  
+  function buildPageContext() {
+    const pageNames = {
+      home: "Home Feed (posts from followed users + stories)",
+      explore: "Explore page (trending posts grid + user search)",
+      reels: "Reels page (vertical short-video feed)",
+      profile: viewingProfile
+        ? `Profile page of @${viewingProfile.username}${viewingProfile.displayName ? ` (${viewingProfile.displayName})` : ""}${viewingProfile.bio ? ` — bio: ${viewingProfile.bio}` : ""}`
+        : "Profile page",
+      notifications: "Notifications page (likes, comments, new followers)",
+    };
+    let ctx = `The user is currently on the ${pageNames[page] || page}.`;
+    if (activePost) {
+      ctx += `\nThey have a post in focus — posted by @${activePost.username || "unknown"}`;
+      if (activePost.caption) ctx += `, caption: "${activePost.caption}"`;
+      if (activePost.likeCount !== undefined) ctx += `, likes: ${activePost.likeCount}`;
+      if (activePost.commentCount !== undefined) ctx += `, comments: ${activePost.commentCount}`;
+    }
+    return ctx;
+  }
+
+  function navigateTo(newPage) {
+    setPage(newPage);
+    setActivePost(null); 
+  }
+
+  function goToProfile(uid, profileData) {
     setViewingUid(uid);
-    setPage("profile");
+    setViewingProfile(profileData || null);
+    navigateTo("profile");
   }
 
   function goToNotifications() {
-    setPage("notifications");
+    navigateTo("notifications");
     setUnreadNotifs(0);
 
     apiFetch("/api/notifications/mark-read", { method: "PUT" }).catch(() => { });
@@ -180,18 +210,19 @@ export default function App() {
   if (!authUser) return <AuthPage onAuth={setAuthUser} onProfileLoaded={setCurrentUserProfile} />;
 
   const isReelsPage = page === "reels";
+  const pageContext = buildPageContext();
 
   return (
     <div className="app-layout">
       { }
       <nav className="bottom-nav">
-        <button className={`nav-item ${page === "home" ? "active" : ""}`} onClick={() => setPage("home")}>
+        <button className={`nav-item ${page === "home" ? "active" : ""}`} onClick={() => navigateTo("home")}>
           <HomeIcon filled={page === "home"} />
         </button>
-        <button className={`nav-item ${page === "explore" ? "active" : ""}`} onClick={() => setPage("explore")}>
+        <button className={`nav-item ${page === "explore" ? "active" : ""}`} onClick={() => navigateTo("explore")}>
           <SearchIcon filled={page === "explore"} />
         </button>
-        <button className={`nav-item ${page === "reels" ? "active" : ""}`} onClick={() => setPage("reels")}>
+        <button className={`nav-item ${page === "reels" ? "active" : ""}`} onClick={() => navigateTo("reels")}>
           <ReelIcon filled={page === "reels"} />
         </button>
         <button className="nav-item" onClick={() => setShowNewPost(true)}>
@@ -201,7 +232,7 @@ export default function App() {
           <HeartIcon filled={page === "notifications"} />
           {unreadNotifs > 0 && <span className="notif-badge">{unreadNotifs > 9 ? "9+" : unreadNotifs}</span>}
         </button>
-        <button className={`nav-item ${page === "profile" && viewingUid === authUser?.uid ? "active" : ""}`} onClick={() => goToProfile(authUser?.uid)}>
+        <button className={`nav-item ${page === "profile" && viewingUid === authUser?.uid ? "active" : ""}`} onClick={() => goToProfile(authUser?.uid, currentUserProfile)}>
           <Avatar src={currentUserProfile?.photoURL} name={currentUserProfile?.username || "Me"} size={26} />
         </button>
       </nav>
@@ -209,13 +240,13 @@ export default function App() {
       { }
       <nav className="sidebar">
         <div className="sidebar-logo">Snapgram</div>
-        <button className={`nav-item ${page === "home" ? "active" : ""}`} onClick={() => setPage("home")}>
+        <button className={`nav-item ${page === "home" ? "active" : ""}`} onClick={() => navigateTo("home")}>
           <HomeIcon filled={page === "home"} /><span>Home</span>
         </button>
-        <button className={`nav-item ${page === "explore" ? "active" : ""}`} onClick={() => setPage("explore")}>
+        <button className={`nav-item ${page === "explore" ? "active" : ""}`} onClick={() => navigateTo("explore")}>
           <SearchIcon filled={page === "explore"} /><span>Explore</span>
         </button>
-        <button className={`nav-item ${page === "reels" ? "active" : ""}`} onClick={() => setPage("reels")}>
+        <button className={`nav-item ${page === "reels" ? "active" : ""}`} onClick={() => navigateTo("reels")}>
           <ReelIcon filled={page === "reels"} /><span>Reels</span>
         </button>
         <button className="nav-item" onClick={() => setShowNewPost(true)}>
@@ -232,7 +263,7 @@ export default function App() {
           {unreadNotifs > 0 && <span className="notif-badge sidebar-notif-badge">{unreadNotifs > 9 ? "9+" : unreadNotifs}</span>}
         </button>
         <div className="nav-spacer" />
-        <button className={`nav-item ${page === "profile" && viewingUid === authUser?.uid ? "active" : ""}`} onClick={() => goToProfile(authUser?.uid)}>
+        <button className={`nav-item ${page === "profile" && viewingUid === authUser?.uid ? "active" : ""}`} onClick={() => goToProfile(authUser?.uid, currentUserProfile)}>
           <Avatar src={currentUserProfile?.photoURL} name={currentUserProfile?.username || "Me"} size={26} />
           <span>Profile</span>
         </button>
@@ -277,6 +308,9 @@ export default function App() {
             open={chatbotOpen}
             onClose={() => setChatbotOpen(false)}
             isMobile={false}
+            activePost={activePost}
+            page={page}
+            pageContext={pageContext}
           />
         </div>
       ) : (
@@ -293,6 +327,9 @@ export default function App() {
             open={chatbotOpen}
             onClose={() => setChatbotOpen(false)}
             isMobile={true}
+            activePost={activePost}
+            page={page}
+            pageContext={pageContext}
           />
         </>
       )}
@@ -300,16 +337,29 @@ export default function App() {
       <div className={`main-content ${isReelsPage ? "main-content--reels" : ""}`}>
         {page === "home" && (
           <>
-            <FeedPage currentUser={authUser} currentUserProfile={currentUserProfile} onProfileClick={goToProfile} />
-            <RightPanel currentUser={authUser} currentUserProfile={currentUserProfile} onProfileClick={goToProfile} onSeeAll={() => setPage("explore")} />
+            <FeedPage
+              currentUser={authUser}
+              currentUserProfile={currentUserProfile}
+              onProfileClick={goToProfile}
+              onActivePostChange={setActivePost}
+            />
+            <RightPanel currentUser={authUser} currentUserProfile={currentUserProfile} onProfileClick={goToProfile} onSeeAll={() => navigateTo("explore")} />
           </>
         )}
-        {page === "explore" && <ExplorePage currentUser={authUser} currentUserProfile={currentUserProfile} onProfileClick={goToProfile} />}
+        {page === "explore" && (
+          <ExplorePage
+            currentUser={authUser}
+            currentUserProfile={currentUserProfile}
+            onProfileClick={goToProfile}
+            onActivePostChange={setActivePost}
+          />
+        )}
         {page === "reels" && (
           <ReelsPage
             currentUser={authUser}
             currentUserProfile={currentUserProfile}
             onProfileClick={goToProfile}
+            onActivePostChange={setActivePost}
           />
         )}
         {page === "profile" && (
@@ -318,7 +368,9 @@ export default function App() {
             currentUser={authUser}
             currentUserProfile={currentUserProfile}
             onProfileClick={goToProfile}
-            onProfileUpdated={setCurrentUserProfile}
+            onProfileUpdated={(p) => { setCurrentUserProfile(p); setViewingProfile(p); }}
+            onActivePostChange={setActivePost}
+            onProfileLoaded={setViewingProfile}
           />
         )}
         {page === "notifications" && (
@@ -368,6 +420,9 @@ export default function App() {
           onPosted={() => { setShowNewReel(false); setPage("reels"); }}
         />
       )}
+
+      {}
+      <ToastPortal />
     </div>
   );
 }

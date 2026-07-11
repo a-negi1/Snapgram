@@ -12,6 +12,8 @@ export default function NewReelModal({ currentUser, currentUserProfile, onClose,
   const [loading, setLoading]             = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [error, setError]                 = useState("");
+  const [captionLoading, setCaptionLoading] = useState(false);
+  const [captionError, setCaptionError]   = useState(null);
   const fileRef                           = useRef();
   const previewUrlRef                     = useRef(null);
 
@@ -62,6 +64,50 @@ const url = URL.createObjectURL(f);
     setPreview(null);
     setError("");
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function extractVideoFrame(f) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.muted = true;
+      video.crossOrigin = "anonymous";
+      const objectUrl = URL.createObjectURL(f);
+      video.src = objectUrl;
+      video.addEventListener("loadeddata", () => {
+        video.currentTime = 0;
+      });
+      video.addEventListener("seeked", () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 360;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(objectUrl);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      });
+      video.addEventListener("error", () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Failed to extract video frame"));
+      });
+    });
+  }
+
+  async function generateCaption() {
+    if (!file) return;
+    setCaptionLoading(true);
+    setCaptionError(null);
+    try {
+      const imageBase64 = await extractVideoFrame(file);
+      const data = await apiFetch("/api/posts/generate-caption", {
+        method: "POST",
+        body: JSON.stringify({ imageBase64 }),
+      });
+      setCaption(data.caption || "");
+    } catch (e) {
+      setCaptionError("✗ Caption generation failed: " + e.message);
+    } finally {
+      setCaptionLoading(false);
+    }
   }
 
   async function submit() {
@@ -162,6 +208,21 @@ const url = URL.createObjectURL(f);
             }}>
               {error}
             </div>
+          )}
+
+          {preview && (
+            <button
+              id="generate-caption-btn-reel"
+              className="generate-caption-btn"
+              onClick={generateCaption}
+              disabled={captionLoading || loading}
+            >
+              {captionLoading ? "✨ Analyzing video…" : "✨ Generate Caption using AI"}
+            </button>
+          )}
+
+          {captionError && (
+            <div className="caption-error-toast">{captionError}</div>
           )}
 
           <textarea

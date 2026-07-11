@@ -1,27 +1,29 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { apiFetch } from "../api";
 import { timeAgo } from "../utils";
+import { toast } from "../hooks/useToast";
 import Avatar from "./Avatar";
 import { HeartIcon, CommentIcon, ShareIcon, TrashIcon } from "./Icons";
 
 export default function ReelCard({ reel, currentUser, currentUserProfile, onProfileClick, onReelDeleted, onLikeSync }) {
-  const [liked, setLiked]               = useState(reel.likes?.includes(currentUser?.uid));
-  const [likeCount, setLikeCount]       = useState(reel.likeCount || 0);
+  const [liked, setLiked] = useState(reel.likes?.includes(currentUser?.uid));
+  const [likeCount, setLikeCount] = useState(reel.likeCount || 0);
   const [commentCount, setCommentCount] = useState(reel.commentCount || 0);
-  const [muted, setMuted]               = useState(true);
+  const [muted, setMuted] = useState(true);
   const [showMuteHint, setShowMuteHint] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments]         = useState([]);
-  const [commentText, setCommentText]   = useState("");
-  const [heartBurst, setHeartBurst]     = useState(null);
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState("");
+  const [commentLoading, setCommentLoading] = useState(false);
+  const [heartBurst, setHeartBurst] = useState(null);
   const [captionExpanded, setCaptionExpanded] = useState(false);
-  const [shareCopied, setShareCopied]   = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
 
-  const videoRef    = useRef(null);
-  const cardRef     = useRef(null);
-  const lastTap     = useRef(0);
-  const muteTimer   = useRef(null);
+  const videoRef = useRef(null);
+  const cardRef = useRef(null);
+  const lastTap = useRef(0);
+  const muteTimer = useRef(null);
 
   const isOwner = currentUser?.uid === reel.uid;
 
@@ -43,7 +45,7 @@ export default function ReelCard({ reel, currentUser, currentUserProfile, onProf
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && entry.intersectionRatio >= 0.7) {
-          video.play().catch(() => {});
+          video.play().catch(() => { });
         } else {
           video.pause();
         }
@@ -132,9 +134,10 @@ export default function ReelCard({ reel, currentUser, currentUserProfile, onProf
   }
 
   async function postComment() {
-    if (!commentText.trim() || !currentUser) return;
+    if (!commentText.trim() || !currentUser || commentLoading) return;
     const text = commentText.trim();
-    setCommentText("");
+    const toastId = toast.loading("Checking comment…");
+    setCommentLoading(true);
     try {
       const newComment = await apiFetch(`/api/comments/reel/${reel._id}`, {
         method: "POST",
@@ -144,10 +147,21 @@ export default function ReelCard({ reel, currentUser, currentUserProfile, onProf
           photoURL: currentUserProfile?.photoURL || "",
         }),
       });
+
+      toast.dismiss(toastId);
+      setCommentText("");
       setComments((prev) => [...prev, newComment]);
       setCommentCount((c) => c + 1);
     } catch (e) {
-      alert("Failed to post comment: " + e.message);
+      if (e?.status === 422) {
+
+        const reasonStr = (e.data?.reasons || []).join(", ") || "inappropriate content";
+        toast.error(toastId, `Comment blocked — flagged for ${reasonStr}.`);
+      } else {
+        toast.error(toastId, "Failed to post comment. Please try again.");
+      }
+    } finally {
+      setCommentLoading(false);
     }
   }
 
@@ -170,14 +184,14 @@ export default function ReelCard({ reel, currentUser, currentUserProfile, onProf
         <div className={`reel-mute-indicator ${showMuteHint ? "show" : ""}`}>
           {muted ? (
             <svg width="48" height="48" viewBox="0 0 24 24" fill="white">
-              <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-              <line x1="23" y1="9" x2="17" y2="15" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="17" y1="9" x2="23" y2="15" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M11 5L6 9H2v6h4l5 4V5z" />
+              <line x1="23" y1="9" x2="17" y2="15" stroke="white" strokeWidth="2" strokeLinecap="round" />
+              <line x1="17" y1="9" x2="23" y2="15" stroke="white" strokeWidth="2" strokeLinecap="round" />
             </svg>
           ) : (
             <svg width="48" height="48" viewBox="0 0 24 24" fill="white">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-              <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round"/>
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" />
             </svg>
           )}
         </div>
@@ -280,12 +294,14 @@ export default function ReelCard({ reel, currentUser, currentUserProfile, onProf
                 placeholder="Add a comment…"
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && postComment()}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && postComment()}
                 autoFocus
+                disabled={commentLoading}
               />
               <button
                 className={`comment-post-btn ${commentText.trim() ? "active" : ""}`}
                 onClick={postComment}
+                disabled={commentLoading}
               >
                 Post
               </button>

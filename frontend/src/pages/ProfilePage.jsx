@@ -10,7 +10,7 @@ function SkeletonGridItem() {
   return <div className="skeleton-grid-item" />;
 }
 
-export default function ProfilePage({ profileUid, currentUser, currentUserProfile, onProfileClick, onProfileUpdated }) {
+export default function ProfilePage({ profileUid, currentUser, currentUserProfile, onProfileClick, onProfileUpdated, onActivePostChange, onProfileLoaded }) {
   const [profile, setProfile] = useState(null);
   const [activeTab, setActiveTab] = useState("posts");
   const [following, setFollowing] = useState(false);
@@ -101,6 +101,7 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
     if (!currentUserProfile) { setLoading(true); return; }
     setProfile(currentUserProfile);
     setLoading(false);
+    onProfileLoaded?.(currentUserProfile);
   }, [profileUid, isOwnProfile, currentUserProfile]);
 
   useEffect(() => {
@@ -117,6 +118,7 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
         setProfile(profileData);
         setFollowing(currentUser && (profileData.followers || []).includes(currentUser.uid));
         setLoading(false);
+        onProfileLoaded?.(profileData);
       })
       .catch(console.error);
   }, [profileUid, isOwnProfile, currentUser]);
@@ -353,7 +355,7 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
           <>
             <div className="profile-grid">
               {displayPosts.map((p) => (
-                <div key={p._id} className="profile-grid-item" onClick={() => setLightboxPost(p)}>
+                <div key={p._id} className="profile-grid-item" onClick={() => { setLightboxPost(p); onActivePostChange?.(p); }}>
                   {p.imageURL ? (
                     p.mediaType === "video" ? (
                       <>
@@ -407,17 +409,18 @@ export default function ProfilePage({ profileUid, currentUser, currentUserProfil
       </div>
 
       {lightboxPost && (
-        <div className="modal-overlay" onClick={() => setLightboxPost(null)}>
+        <div className="modal-overlay" onClick={() => { setLightboxPost(null); onActivePostChange?.(null); }}>
           <div className="lightbox-card" onClick={(e) => e.stopPropagation()}>
             <PostCard
               post={lightboxPost}
               currentUser={currentUser}
               currentUserProfile={currentUserProfile}
-              onProfileClick={(uid) => { setLightboxPost(null); onProfileClick(uid); }}
+              onProfileClick={(uid) => { setLightboxPost(null); onActivePostChange?.(null); onProfileClick(uid); }}
               onPostDeleted={(id) => {
                 resetPosts();
                 resetSaved();
                 setLightboxPost(null);
+                onActivePostChange?.(null);
               }}
             />
           </div>
