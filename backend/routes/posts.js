@@ -11,16 +11,26 @@ const { authenticate } = require("../middleware/auth");
 const Groq = require("groq-sdk");
 
 
+function stripThink(text) {
+  if (!text) return "";
+
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+  cleaned = cleaned.replace(/<think>[\s\S]*/gi, "");
+  return cleaned.trim();
+}
+
+
 const GUARD_CATEGORIES = {
-  S1:  "violent crimes",
-  S2:  "non-violent crimes",
-  S3:  "sex crimes",
-  S4:  "child exploitation",
-  S5:  "defamation",
-  S6:  "specialized advice",
-  S7:  "privacy violations",
-  S8:  "intellectual property",
-  S9:  "weapons",
+  S1: "violent crimes",
+  S2: "non-violent crimes",
+  S3: "sex crimes",
+  S4: "child exploitation",
+  S5: "defamation",
+  S6: "specialized advice",
+  S7: "privacy violations",
+  S8: "intellectual property",
+  S9: "weapons",
   S10: "hate speech",
   S11: "self-harm",
   S12: "sexual content",
@@ -40,7 +50,7 @@ function translateReasons(codeString) {
 function cloudinaryDelete(publicId) {
   return new Promise((resolve, reject) => {
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey    = process.env.CLOUDINARY_API_KEY;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
     if (!cloudName || !apiKey || !apiSecret) {
@@ -49,7 +59,7 @@ function cloudinaryDelete(publicId) {
     }
 
     const timestamp = Math.floor(Date.now() / 1000);
-    const toSign    = `public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
+    const toSign = `public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
     const signature = crypto.createHash("sha1").update(toSign).digest("hex");
 
     const body = JSON.stringify({ public_id: publicId, timestamp, api_key: apiKey, signature });
@@ -87,7 +97,7 @@ function cloudinaryDelete(publicId) {
 
 
 function extractPublicId(imageURL) {
-  
+
   try {
     const match = imageURL.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[a-z]+)?$/i);
     return match ? match[1] : null;
@@ -111,7 +121,7 @@ router.post("/generate-caption", authenticate, async (req, res) => {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
     const completion = await groq.chat.completions.create({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      model: "qwen/qwen3.6-27b",
       messages: [
         {
           role: "user",
@@ -127,11 +137,11 @@ router.post("/generate-caption", authenticate, async (req, res) => {
           ],
         },
       ],
-      max_tokens: 300,
+      max_tokens: 1500,
       temperature: 0.85,
     });
 
-    const caption = completion.choices[0]?.message?.content?.trim() || "";
+    const caption = stripThink(completion.choices[0]?.message?.content) || "";
     res.json({ caption });
   } catch (err) {
     console.error("Groq caption error:", err?.message || err);
@@ -152,16 +162,16 @@ router.post("/moderate-image", authenticate, async (req, res) => {
   if (!imageURL) return res.status(400).json({ error: "imageURL is required" });
 
   if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === "your_groq_api_key_here") {
-    
+
     return res.json({ safe: true });
   }
 
   try {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    
+
     const descResult = await groq.chat.completions.create({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      model: "qwen/qwen3.6-27b",
       messages: [{
         role: "user",
         content: [
@@ -172,11 +182,11 @@ router.post("/moderate-image", authenticate, async (req, res) => {
           },
         ],
       }],
-      max_tokens: 400,
+      max_tokens: 1200,
       temperature: 0,
     });
 
-    const description = descResult.choices[0]?.message?.content?.trim() || "";
+    const description = stripThink(descResult.choices[0]?.message?.content) || "";
     console.log("[moderate-image] vision description:", description);
 
     if (!description) {
@@ -188,9 +198,9 @@ router.post("/moderate-image", authenticate, async (req, res) => {
       });
     }
 
-    
-    
-    
+
+
+
     const SYSTEM_PROMPT =
       "You are a strict content moderator for a social media platform.\n" +
       "Read the image description and decide if it is safe to post.\n\n" +
@@ -213,13 +223,13 @@ router.post("/moderate-image", authenticate, async (req, res) => {
       model: "llama-3.1-8b-instant",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user",   content: "Image description:\n" + description },
+        { role: "user", content: "Image description:\n" + description },
       ],
       max_tokens: 60,
       temperature: 0,
     });
 
-    const rawVerdict  = modResult.choices[0]?.message?.content?.trim() || "";
+    const rawVerdict = modResult.choices[0]?.message?.content?.trim() || "";
     console.log("[moderate-image] classification verdict:", rawVerdict);
 
     const verdictLines = rawVerdict.split("\n").map((l) => l.trim());
@@ -229,7 +239,7 @@ router.post("/moderate-image", authenticate, async (req, res) => {
       return res.json({ safe: true });
     }
 
-    
+
     const reason = verdictLines[1] || "policy violation";
     console.warn("[moderate-image] BLOCKED —", reason);
 
@@ -246,7 +256,7 @@ router.post("/moderate-image", authenticate, async (req, res) => {
 
   } catch (err) {
     console.error("[moderate-image] error:", err?.message || err);
-    
+
     return res.status(422).json({
       safe: false,
       reasons: ["moderation check failed"],
@@ -491,7 +501,7 @@ router.get("/user/:uid", authenticate, async (req, res) => {
     const cursor = req.query.cursor || null;
 
     const query = { uid: req.params.uid };
-    
+
     if (cursor) query._id = { $lt: new ObjectId(cursor) };
 
     const data = await Post.find(query)

@@ -3,8 +3,18 @@ const router = express.Router();
 const { authenticate } = require("../middleware/auth");
 const Groq = require("groq-sdk");
 
-const TEXT_MODEL   = "llama-3.1-8b-instant";
-const VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+
+function stripThink(text) {
+  if (!text) return "";
+
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+  cleaned = cleaned.replace(/<think>[\s\S]*/gi, "");
+  return cleaned.trim();
+}
+
+const TEXT_MODEL = "llama-3.1-8b-instant";
+const VISION_MODEL = "qwen/qwen3.6-27b";
 
 const SYSTEM_PROMPT = `You are Snap, a friendly and helpful AI assistant for Snapgram — a social media platform similar to Instagram.
 
@@ -54,16 +64,16 @@ router.post("/chat", authenticate, async (req, res) => {
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
   try {
-    
-    
-    
+
+
+
     const { messages, imageURL, screenshotDataURL, pageContext } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: "messages array is required" });
     }
 
-    
+
     const validRoles = ["user", "assistant"];
     const cleanMessages = messages
       .filter((m) => m && validRoles.includes(m.role) && m.content && m.content !== "")
@@ -73,7 +83,7 @@ router.post("/chat", authenticate, async (req, res) => {
       })
       .filter((m) => m.content.length > 0);
 
-    
+
     while (cleanMessages.length > 0 && cleanMessages[0].role === "assistant") {
       cleanMessages.shift();
     }
@@ -82,21 +92,21 @@ router.post("/chat", authenticate, async (req, res) => {
       return res.status(400).json({ error: "No valid user messages found" });
     }
 
-    
-    
+
+
     const activeImageSrc = isValidImageSrc(imageURL) ? imageURL
       : isValidImageSrc(screenshotDataURL) ? screenshotDataURL
-      : null;
+        : null;
 
     const hasImage = activeImageSrc !== null;
     const isScreenshot = hasImage && !isValidImageSrc(imageURL) && isValidImageSrc(screenshotDataURL);
 
-    
+
     const historySlice = cleanMessages.slice(-20);
     let model = hasImage ? VISION_MODEL : TEXT_MODEL;
 
     if (hasImage) {
-      
+
       const lastIdx = historySlice.length - 1;
       if (historySlice[lastIdx].role === "user") {
         historySlice[lastIdx] = {
@@ -115,7 +125,7 @@ router.post("/chat", authenticate, async (req, res) => {
       }
     }
 
-    
+
     const systemMessages = [{ role: "system", content: SYSTEM_PROMPT }];
 
     if (hasImage) {
@@ -147,10 +157,10 @@ router.post("/chat", authenticate, async (req, res) => {
         ...historySlice,
       ],
       temperature: 0.7,
-      max_tokens: 512,
+      max_tokens: 1500,
     });
 
-    const reply = completion.choices?.[0]?.message?.content || "Sorry, I couldn't generate a response.";
+    const reply = stripThink(completion.choices?.[0]?.message?.content) || "Sorry, I couldn't generate a response.";
     res.json({ reply });
 
   } catch (err) {
