@@ -13,8 +13,7 @@ function stripThink(text) {
   return cleaned.trim();
 }
 
-const TEXT_MODEL = "llama-3.1-8b-instant";
-const VISION_MODEL = "qwen/qwen3.6-27b";
+const { GROQ_FAST_MODEL, GROQ_VISION_MODEL } = require("../config/models");
 
 const SYSTEM_PROMPT = `You are Snap, a friendly and helpful AI assistant for Snapgram — a social media platform similar to Instagram.
 
@@ -103,7 +102,7 @@ router.post("/chat", authenticate, async (req, res) => {
 
 
     const historySlice = cleanMessages.slice(-20);
-    let model = hasImage ? VISION_MODEL : TEXT_MODEL;
+    let model = hasImage ? GROQ_VISION_MODEL : GROQ_FAST_MODEL;
 
     if (hasImage) {
 

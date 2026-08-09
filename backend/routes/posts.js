@@ -9,6 +9,7 @@ const User = require("../models/User");
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
 const Groq = require("groq-sdk");
+const { GROQ_FAST_MODEL, GROQ_VISION_MODEL } = require("../config/models");
 
 
 function stripThink(text) {
@@ -121,7 +122,7 @@ router.post("/generate-caption", authenticate, async (req, res) => {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
     const completion = await groq.chat.completions.create({
-      model: "qwen/qwen3.6-27b",
+      model: GROQ_VISION_MODEL,
       messages: [
         {
           role: "user",
@@ -171,7 +172,7 @@ router.post("/moderate-image", authenticate, async (req, res) => {
 
 
     const descResult = await groq.chat.completions.create({
-      model: "qwen/qwen3.6-27b",
+      model: GROQ_VISION_MODEL,
       messages: [{
         role: "user",
         content: [
@@ -220,16 +221,16 @@ router.post("/moderate-image", authenticate, async (req, res) => {
       "<one short plain-English reason, e.g. 'assault rifle visible'>";
 
     const modResult = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: GROQ_FAST_MODEL,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: "Image description:\n" + description },
       ],
-      max_tokens: 60,
+      max_tokens: 1024,
       temperature: 0,
     });
 
-    const rawVerdict = modResult.choices[0]?.message?.content?.trim() || "";
+    const rawVerdict = stripThink(modResult.choices[0]?.message?.content?.trim() || "");
     console.log("[moderate-image] classification verdict:", rawVerdict);
 
     const verdictLines = rawVerdict.split("\n").map((l) => l.trim());

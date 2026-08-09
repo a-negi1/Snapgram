@@ -17,7 +17,7 @@ Snapgram is a **full-stack Instagram-like social media platform** with the follo
 | 👥 Follow System | Follow/unfollow users, followers/following lists |
 |  AI Captions | Groq LLaMA 4 vision model auto-generates captions |
 | 🛡️ Content Moderation | AI two-stage image scan before every post/reel goes live,AI text moderation on every comment |
-| 🤖 Snap AI Chatbot | In-app AI assistant powered by Groq LLaMA 3.1 8B |
+| 🤖 Snap AI Chatbot | In-app AI assistant powered by Groq GPT-oss 20B |
 | 🌙 Dark Mode | Persistent dark/light mode toggle |
 
 ---
@@ -42,7 +42,7 @@ Snapgram is a **full-stack Instagram-like social media platform** with the follo
 | Database | MongoDB (via Mongoose v8) |
 | Auth Server | Firebase Admin SDK v12 |
 | Real-Time | Socket.IO v4 |
-| AI Integration | Groq SDK (LLaMA 4 Scout 17B + LLaMA 3.1 8B Instant) |
+| AI Integration | Groq SDK (Qwen 3.6 27B + GPT-oss 20B) |
 | Media Storage | Cloudinary (via URL — client-side upload) |
 | Logging | Morgan |
 | Config | dotenv |
@@ -78,7 +78,7 @@ graph TB
         Firebase["Firebase Auth\n(Identity Provider)"]
         MongoDB["MongoDB Atlas\n(Primary DB)"]
         Cloudinary["Cloudinary\n(Media Storage)"]
-        Groq["Groq API\nLLaMA 4 Scout 17B (Caption + Moderation)\nLLaMA 3.1 8B Instant (Chat + Guard)"]
+        Groq["Groq API\nQwen 3.6 27B (Caption + Moderation)\nGPT-oss 20B (Chat + Guard)"]
     end
 
     FBClient -->|"OAuth / Email sign-in"| Firebase
@@ -145,7 +145,7 @@ frontend/src/
 │   ├── Icons.jsx         # All SVG icon components
 │   ├── PostCard.jsx      # Full post card (like, comment, save, delete; double-tap to like)
 │   ├── ReelCard.jsx      # Vertical reel card (like, comment, fullscreen)
-│   ├── ChatbotCard.jsx   # Snap AI chatbot overlay (Groq LLaMA 3.1 8B)
+│   ├── ChatbotCard.jsx   # Snap AI chatbot overlay (Groq GPT-oss 20B)
 │   ├── NewPostModal.jsx  # Create post modal (Cloudinary upload + AI caption)
 │   ├── NewReelModal.jsx  # Create reel modal (Cloudinary video upload)
 │   └── RightPanel.jsx    # Right sidebar (user suggestions, follow)
@@ -402,7 +402,7 @@ erDiagram
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/chat` | ✅ | Send a message to Snap AI; returns AI reply (Groq LLaMA 3.1 8B Instant) |
+| `POST` | `/chat` | ✅ | Send a message to Snap AI; returns AI reply (Groq GPT-oss 20B) |
 
 **Request body:**
 ```json
@@ -581,7 +581,7 @@ sequenceDiagram
     Groq-->>Backend: Plain-text description of image content
 
     Note over Backend,Groq: Stage 2 — Text classifier decides safe / unsafe
-    Backend->>Groq: LLaMA 3.1 8B Instant (description + system prompt)
+    Backend->>Groq: GPT-oss 20B (description + system prompt)
     Groq-->>Backend: "safe" OR "unsafe\n<reason>"
 
     alt Image is SAFE
@@ -621,7 +621,7 @@ Groq returns "unsafe" → image deleted from Cloudinary → 422 blocked
 | Stage | Model | Purpose |
 |---|---|---|
 | **1 — Vision** | LLaMA 4 Scout 17B | Converts image pixels into a detailed text description |
-| **2 — Guard** | LLaMA 3.1 8B Instant | Classifies the description against a strict system prompt |
+| **2 — Guard** | GPT-oss 20B | Classifies the description against a strict system prompt |
 
 Using a text classifier in stage 2 (instead of a guard model directly on the image) gives full control over the blocking rules via the system prompt and produces a consistent, parseable output format.
 
@@ -640,7 +640,7 @@ POST /api/comments/:postId { text }
          ↓
 backend: moderateText(text)
          ↓
-Groq: LLaMA 3.1 8B Instant + strict system prompt
+Groq: GPT-oss 20B + strict system prompt
          ↓
   "safe"  → Comment saved to DB → 201 Created
   "unsafe: <reason>"  → 422 blocked, comment never saved
@@ -668,7 +668,7 @@ This is intentionally different from image moderation (which is fail-closed), be
 
 | | Image Moderation | Comment Moderation |
 |---|---|---|
-| **Model** | LLaMA 4 Scout 17B → LLaMA 3.1 8B | LLaMA 3.1 8B only |
+| **Model** | Qwen 3.6 27B → GPT-oss 20B | GPT-oss 20B only |
 | **Stages** | 2 (vision describe + text classify) | 1 (direct text classify) |
 | **On Groq failure** | 🚫 Fail-closed (block upload) | ✅ Fail-open (allow comment) |
 | **On block** | Delete image from Cloudinary + 422 | 422 only (nothing to delete) |
@@ -799,7 +799,7 @@ App
 | **Routing** | State-machine in `App.jsx` | Simpler than React Router for an SPA with few views |
 | **AI Captions** | Groq LLaMA 4 Scout 17B | Fast inference, free tier, vision-capable |
 | **Content Moderation** | Two-stage image pipeline (fail-closed) + single-stage comment pipeline (fail-open) | Images cleaned from Cloudinary on block; comments fail-open so outages don’t break commenting |
-| **AI Chatbot** | Groq LLaMA 3.1 8B Instant | Lightweight chat model; 20-message rolling context window; platform-aware system prompt |
+| **AI Chatbot** | Groq GPT-oss 20B | Lightweight chat model; 20-message rolling context window; platform-aware system prompt; chain-of-thought stripped via `stripThink()` |
 | **Double-tap to Like** | `onClick` + 300ms tap gap (vs `onDoubleClick`) | Native `dblclick` doesn't fire on mobile touch — manual tap tracking works across all devices |
 | **Socket Cleanup** | Named handler refs stored on socket object | `sock.off(event, handler)` requires the exact same reference; anonymous functions can't be removed, causing listener leaks |
 

@@ -9,6 +9,15 @@ const User = require("../models/User");
 const Notification = require("../models/Notification");
 const { authenticate } = require("../middleware/auth");
 const Groq = require("groq-sdk");
+const { GROQ_FAST_MODEL } = require("../config/models");
+
+
+function stripThink(text) {
+  if (!text) return "";
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  cleaned = cleaned.replace(/<think>[\s\S]*/gi, "");
+  return cleaned.trim();
+}
 
 
 const GUARD_CATEGORIES = {
@@ -65,16 +74,16 @@ safe
 unsafe: <brief plain-language reason>`;
 
   const completion = await groq.chat.completions.create({
-    model: "llama-3.1-8b-instant",
+    model: GROQ_FAST_MODEL,
     messages: [
       { role: "system", content: SYSTEM },
       { role: "user", content: `Comment to moderate: "${text}"` },
     ],
-    max_tokens: 40,
+    max_tokens: 1024,
     temperature: 0,
   });
 
-  const verdict = completion.choices[0]?.message?.content?.trim().toLowerCase() || "safe";
+  const verdict = stripThink(completion.choices[0]?.message?.content?.trim().toLowerCase() || "safe");
   if (verdict.startsWith("safe")) return { safe: true };
 
   const reason = verdict.replace(/^unsafe[:\s]*/i, "").trim() || "inappropriate content";
